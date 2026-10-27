@@ -258,7 +258,7 @@ private fun AddProfileDialog(
                     ImportResult.DUPLICATE -> error = duplicateMessage
                 }
             }) {
-                Text(stringResource(R.string.import))
+                Text(stringResource(R.string.action_import))
             }
         },
         dismissButton = {

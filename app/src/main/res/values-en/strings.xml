@@ -24,7 +24,7 @@
     <string name="import_link">Import a link</string>
     <string name="link_hint">vless://… · vmess://… · trojan://… · ss://…</string>
     <string name="paste">Paste</string>
-    <string name="import">Import</string>
+    <string name="action_import">Import</string>
     <string name="cancel">Cancel</string>
     <string name="delete">Delete</string>
     <string name="selected">Selected</string>
