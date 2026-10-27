@@ -70,7 +70,12 @@ object XrayConfigBuilder {
             "dns",
             JSONObject()
                 .put("servers", dnsServers)
-                .put("queryStrategy", "UseIP")
+                // IPv6 désactivé : ne jamais renvoyer d'AAAA aux applications.
+                // Avec "UseIP" + la route ::/0 sur le TUN, les apps préféraient
+                // l'IPv6 puis se noyaient dans le blackhole silencieux du
+                // bloc ::/0 (aucun RST ni ICMP) : elles semblaient mortes avant
+                // leur repli IPv4. "UseIPv4" élimine la cause à la source.
+                .put("queryStrategy", if (settings.ipv6) "UseIP" else "UseIPv4")
                 // Cache DNS activé explicitement : les résolutions répétées ne
                 // repartent pas dans le tunnel à chaque requête.
                 .put("disableCache", false)
@@ -147,9 +152,13 @@ object XrayConfigBuilder {
 
         val rules = JSONArray()
         // DNS de l'interface VPN -> module DNS de Xray (résolution dans le tunnel).
+        // http-in n'est référencé que s'il existe, sinon le cœur peut refuser
+        // la règle (tag d'inbound inconnu).
+        val dnsInboundTags = JSONArray().put("socks-in")
+        if (settings.httpProxyEnabled) dnsInboundTags.put("http-in")
         rules.put(
             fieldRule()
-                .put("inboundTag", JSONArray().put("socks-in").put("http-in"))
+                .put("inboundTag", dnsInboundTags)
                 .put("port", "53")
                 .put("outboundTag", "dns-out")
         )

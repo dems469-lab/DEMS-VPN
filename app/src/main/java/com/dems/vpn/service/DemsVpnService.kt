@@ -353,10 +353,16 @@ class DemsVpnService : VpnService() {
             appendLine("socks5:")
             appendLine("  port: ${settings.socksPort}")
             appendLine("  address: 127.0.0.1")
-            // hev n'accepte que 'udp' ou 'tcp' : quand l'UDP est désactivé, on
-            // passe en 'tcp' pour rester cohérent avec l'inbound Xray (udp=false)
-            // au lieu de laisser hev tenter des associations qui seront refusées.
-            appendLine("  udp: ${if (settings.socksUdp) "'udp'" else "'tcp'"}")
+            // hev ne connaît que deux modes de relais UDP : 'udp' (standard
+            // SOCKS5) et 'tcp' (encapsulation propriétaire, réservée au
+            // hev-socks5-SERVER : Xray ne l'interprète pas et tout l'UDP --
+            // DNS inclus -- mourait). 'udp' est donc le seul mode utilisable ;
+            // si l'UDP est désactivé, c'est l'inbound Xray (udp=false) qui
+            // refuse les associations, par flux, sans toucher au TCP.
+            appendLine("  udp: 'udp'")
+            if (!settings.socksUdp) {
+                Log.i(TAG, "UDP SOCKS désactivé : les associations UDP seront refusées par Xray")
+            }
             appendLine("  username: '${yamlEscape(user)}'")
             appendLine("  password: '${yamlEscape(pass)}'")
             appendLine("misc:")
