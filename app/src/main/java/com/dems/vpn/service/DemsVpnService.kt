@@ -66,6 +66,8 @@ class DemsVpnService : VpnService() {
         private const val STABLE_RESET_MS = 60_000L
 
         private const val WATCHDOG_INTERVAL_MS = 20_000L
+        private const val VERIFY_ATTEMPTS = 2
+        private const val VERIFY_RETRY_DELAY_MS = 2_000L
         private const val WATCHDOG_MAX_FAILURES = 2
         private const val PROBE_TIMEOUT_MS = 5_000
         private const val WAKE_LOCK_TIMEOUT_MS = 10 * 60 * 1000L
@@ -189,7 +191,7 @@ class DemsVpnService : VpnService() {
 
     // ------------------------------------------------------------- Démarrage
 
-    private fun startVpn(profileId: String, retrying: Boolean = false): Boolean {
+    private suspend fun startVpn(profileId: String, retrying: Boolean = false): Boolean {
         val profile = ProfileStore.find(profileId)
         if (profile == null) return abort(retrying, R.string.error_profile)
         val settings = SettingsStore.current()
@@ -268,9 +270,36 @@ class DemsVpnService : VpnService() {
         }
 
         running = true
-        connectedAt = SystemClock.elapsedRealtime()
         currentProfileId = profileId
         currentProfileName = profile.name
+        TunnelDiagnostics.update {
+            copy(
+                coreRunning = XrayCore.isRunning(),
+                hevRunning = true,
+                probe = TunnelDiagnostics.Probe.UNKNOWN,
+                probeAt = 0L
+            )
+        }
+
+        // « Connecté » n'est affiché qu'après une preuve réelle : une requête
+        // HTTP complète à travers TUN → hev → Xray → serveur (le CONNECT par
+        // domaine impose en plus une résolution DNS par le cœur).
+        VpnController.verifying(profile.name)
+        updateNotification(getString(R.string.status_verifying))
+
+        val verification = verifyTunnel()
+        if (stopRequested) {
+            cleanup()
+            return false
+        }
+        if (!verification.ok) {
+            return abortMessage(
+                retrying,
+                getString(R.string.error_tunnel_no_traffic) + " (${verification.cause})"
+            )
+        }
+
+        connectedAt = SystemClock.elapsedRealtime()
         SettingsStore.setWasConnected(true)
         VpnController.connected(profile.name)
         updateNotification(getString(R.string.notification_connected, profile.name))
@@ -419,6 +448,9 @@ class DemsVpnService : VpnService() {
                 lastTick = now
 
                 VpnController.traffic(uploadTotal, downloadTotal, uploadRate, downloadRate)
+                TunnelDiagnostics.update {
+                    copy(proxyBytesUp = uploadTotal, proxyBytesDown = downloadTotal)
+                }
                 updateNotification(
                     getString(
                         R.string.notification_traffic,
@@ -436,6 +468,7 @@ class DemsVpnService : VpnService() {
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
                 bindUnderlying(network)
+                reportUnderlying(manager.getNetworkCapabilities(network))
                 // Ignore l'événement déclenché juste après l'enregistrement.
                 if (SystemClock.elapsedRealtime() - connectedAt < RECONNECT_MIN_UPTIME_MS) return
                 scheduleReconnect("réseau disponible")
@@ -450,6 +483,7 @@ class DemsVpnService : VpnService() {
                 network: Network,
                 capabilities: NetworkCapabilities
             ) {
+                reportUnderlying(capabilities)
                 if (!capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
                     scheduleReconnect("réseau sans Internet")
                 } else {
@@ -463,6 +497,18 @@ class DemsVpnService : VpnService() {
                 Log.w(TAG, "Suivi réseau indisponible", it)
                 networkCallback = null
             }
+    }
+
+    /** Diagnostic : nom du réseau sous-jacent observé (aucune supposition). */
+    private fun reportUnderlying(capabilities: NetworkCapabilities?) {
+        val names = mutableListOf<String>()
+        if (capabilities != null) {
+            if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) names.add("Wi-Fi")
+            if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) names.add("Cellulaire")
+            if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) names.add("Ethernet")
+            if (names.isEmpty()) names.add("autre")
+        }
+        TunnelDiagnostics.update { copy(underlying = names.joinToString(" + ")) }
     }
 
     /** Lie les sockets du tunnel au réseau courant (Wi-Fi ou 4G). */
@@ -551,7 +597,21 @@ class DemsVpnService : VpnService() {
                     backoffAttempt = 0
                 }
 
-                val healthy = XrayCore.isRunning() && probeTunnel()
+                val core = XrayCore.isRunning()
+                val outcome = if (core) probeTunnel() else null
+                if (outcome != null) {
+                    TunnelDiagnostics.update {
+                        copy(
+                            coreRunning = true,
+                            socksPortOpen = outcome.portOpen,
+                            probe = outcome.phase,
+                            probeAt = System.currentTimeMillis()
+                        )
+                    }
+                } else {
+                    TunnelDiagnostics.update { copy(coreRunning = false) }
+                }
+                val healthy = outcome?.phase == TunnelDiagnostics.Probe.OK
                 if (healthy) {
                     watchdogFailures = 0
                     continue
@@ -571,11 +631,59 @@ class DemsVpnService : VpnService() {
     }
 
     /**
+     * Vérification réelle du tunnel : au plus VERIFY_ATTEMPTS sondes espacées
+     * de VERIFY_RETRY_DELAY_MS. Renvoie la cause la plus précise possible en
+     * cas d'échec (cœur arrêté, port local fermé, négociation, relais, HTTP).
+     *
+     * Le DNS est couvert : le CONNECT est envoyé par domaine, le cœur doit le
+     * résoudre lui-même (réponse SOCKS uniquement après résolution + relais).
+     */
+    private suspend fun verifyTunnel(): Verification {
+        var last: ProbeOutcome? = null
+        repeat(VERIFY_ATTEMPTS) { attempt ->
+            if (attempt > 0) delay(VERIFY_RETRY_DELAY_MS)
+            if (stopRequested || !running) {
+                return Verification(false, getString(R.string.tunnel_cause_aborted))
+            }
+            val outcome = probeTunnel()
+            last = outcome
+            TunnelDiagnostics.update {
+                copy(
+                    coreRunning = XrayCore.isRunning(),
+                    socksPortOpen = outcome.portOpen,
+                    probe = outcome.phase,
+                    probeAt = System.currentTimeMillis()
+                )
+            }
+            if (outcome.phase == TunnelDiagnostics.Probe.OK) return Verification(true, "")
+        }
+        if (!XrayCore.isRunning()) return Verification(false, getString(R.string.tunnel_cause_core))
+        return when (last?.phase) {
+            TunnelDiagnostics.Probe.PORT_CLOSED ->
+                Verification(false, getString(R.string.tunnel_cause_port))
+            TunnelDiagnostics.Probe.AUTH ->
+                Verification(false, getString(R.string.tunnel_cause_auth))
+            TunnelDiagnostics.Probe.RELAY ->
+                Verification(false, getString(R.string.tunnel_cause_relay))
+            TunnelDiagnostics.Probe.HTTP ->
+                Verification(false, getString(R.string.tunnel_cause_http))
+            else -> Verification(false, getString(R.string.tunnel_cause_timeout))
+        }
+    }
+
+    private data class Verification(val ok: Boolean, val cause: String)
+
+    private data class ProbeOutcome(
+        val portOpen: Boolean,
+        val phase: TunnelDiagnostics.Probe
+    )
+
+    /**
      * Requête HTTP réelle à travers le SOCKS local (auth incluse), sans passer
      * par le réseau de l'application : preuve que TUN → hev → Xray → serveur
-     * fonctionne. Test léger (204 attendu), timeout 5 s.
+     * fonctionne. Renvoie la phase la plus avancée atteinte (204 attendu).
      */
-    private fun probeTunnel(): Boolean = runCatching {
+    private fun probeTunnel(): ProbeOutcome = try {
         Socket().use { socket ->
             socket.connect(InetSocketAddress("127.0.0.1", activeSocksPort), PROBE_TIMEOUT_MS)
             socket.soTimeout = PROBE_TIMEOUT_MS
@@ -586,8 +694,9 @@ class DemsVpnService : VpnService() {
             out.write(byteArrayOf(0x05, 0x02, 0x00, 0x02))
             out.flush()
             val greeting = ByteArray(2)
-            if (!readFully(input, greeting)) return false
-            if (greeting[0].toInt() != 0x05) return false
+            if (!readFully(input, greeting) || greeting[0].toInt() != 0x05) {
+                return@use ProbeOutcome(true, TunnelDiagnostics.Probe.AUTH)
+            }
 
             when (greeting[1].toInt()) {
                 0x02 -> {
@@ -598,11 +707,12 @@ class DemsVpnService : VpnService() {
                     )
                     out.flush()
                     val auth = ByteArray(2)
-                    if (!readFully(input, auth)) return false
-                    if (auth[1].toInt() != 0x00) return false
+                    if (!readFully(input, auth) || auth[1].toInt() != 0x00) {
+                        return@use ProbeOutcome(true, TunnelDiagnostics.Probe.AUTH)
+                    }
                 }
                 0x00 -> Unit
-                else -> return false
+                else -> return@use ProbeOutcome(true, TunnelDiagnostics.Probe.AUTH)
             }
 
             // CONNECT connectivitycheck.gstatic.com:80 (résolution par le proxy).
@@ -616,31 +726,42 @@ class DemsVpnService : VpnService() {
             out.flush()
 
             val reply = ByteArray(4)
-            if (!readFully(input, reply)) return false
-            if (reply[1].toInt() != 0x00) return false
+            if (!readFully(input, reply) || reply[1].toInt() != 0x00) {
+                return@use ProbeOutcome(true, TunnelDiagnostics.Probe.RELAY)
+            }
 
             val atyp = reply[3].toInt() and 0xFF
             val addrLen = when (atyp) {
                 0x01 -> 4
                 0x03 -> {
                     val length = input.read()
-                    if (length < 0) return false
+                    if (length < 0) return@use ProbeOutcome(true, TunnelDiagnostics.Probe.RELAY)
                     length
                 }
                 0x04 -> 16
-                else -> return false
+                else -> return@use ProbeOutcome(true, TunnelDiagnostics.Probe.RELAY)
             }
-            if (!readFully(input, ByteArray(addrLen + 2))) return false
+            if (!readFully(input, ByteArray(addrLen + 2))) {
+                return@use ProbeOutcome(true, TunnelDiagnostics.Probe.RELAY)
+            }
 
             val request = "GET /generate_204 HTTP/1.1\r\nHost: $host\r\n" +
                 "Connection: close\r\n\r\n"
             out.write(request.toByteArray())
             out.flush()
 
-            val status = input.bufferedReader().readLine() ?: return false
-            status.startsWith("HTTP/1.") || status.startsWith("HTTP/2")
+            val status = input.bufferedReader().readLine()
+                ?: return@use ProbeOutcome(true, TunnelDiagnostics.Probe.HTTP)
+            if (status.startsWith("HTTP/1.") || status.startsWith("HTTP/2")) {
+                ProbeOutcome(true, TunnelDiagnostics.Probe.OK)
+            } else {
+                ProbeOutcome(true, TunnelDiagnostics.Probe.HTTP)
+            }
         }
-    }.getOrDefault(false)
+    } catch (t: Throwable) {
+        Log.d(TAG, "Sonde tunnel : ${t.message}")
+        ProbeOutcome(false, TunnelDiagnostics.Probe.PORT_CLOSED)
+    }
 
     private fun readFully(input: InputStream, buffer: ByteArray): Boolean {
         var read = 0
@@ -676,6 +797,17 @@ class DemsVpnService : VpnService() {
         runCatching { TProxyService.TProxyStopService() }
         XrayCore.stop()
         closeTun()
+        TunnelDiagnostics.update {
+            copy(
+                coreRunning = false,
+                hevRunning = false,
+                socksPortOpen = null,
+                probe = TunnelDiagnostics.Probe.UNKNOWN,
+                probeAt = 0L,
+                proxyBytesUp = 0L,
+                proxyBytesDown = 0L
+            )
+        }
     }
 
     private fun cleanup() {

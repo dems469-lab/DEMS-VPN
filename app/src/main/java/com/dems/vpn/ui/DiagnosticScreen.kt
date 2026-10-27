@@ -33,8 +33,12 @@ import androidx.compose.ui.unit.dp
 import com.dems.vpn.R
 import com.dems.vpn.data.Profile
 import com.dems.vpn.service.VpnState
+import com.dems.vpn.service.TunnelDiagnostics
 import com.dems.vpn.service.VpnStatus
 import kotlinx.coroutines.delay
+
+/** Alias court pour le cliché de diagnostic du tunnel. */
+typealias TunnelDiagnosticsSnapshot = TunnelDiagnostics.Snapshot
 
 /**
  * Diagnostic de session, sans journalisation de contenu :
@@ -44,6 +48,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun DiagnosticScreen(
     status: VpnStatus,
+    tunnel: TunnelDiagnosticsSnapshot,
     profile: Profile?,
     latency: Long?,
     deviceKey: String,
@@ -115,6 +120,40 @@ fun DiagnosticScreen(
                 InfoRow(
                     stringResource(R.string.diag_app),
                     appVersion
+                )
+            }
+
+            SectionTitle(stringResource(R.string.diag_tunnel))
+            DiagnosticCard {
+                InfoRow(
+                    stringResource(R.string.diag_core_running),
+                    boolLabel(tunnel.coreRunning)
+                )
+                Divider()
+                InfoRow(
+                    stringResource(R.string.diag_hev_running),
+                    optBoolLabel(tunnel.hevRunning)
+                )
+                Divider()
+                InfoRow(
+                    stringResource(R.string.diag_socks_port),
+                    portLabel(tunnel.socksPortOpen)
+                )
+                Divider()
+                InfoRow(
+                    stringResource(R.string.diag_probe),
+                    probeLabel(tunnel.probe)
+                )
+                Divider()
+                InfoRow(
+                    stringResource(R.string.diag_bytes_proxy),
+                    formatBytes(tunnel.proxyBytesDown) + " ↓ / " +
+                        formatBytes(tunnel.proxyBytesUp) + " ↑"
+                )
+                Divider()
+                InfoRow(
+                    stringResource(R.string.diag_underlying),
+                    tunnel.underlying.ifBlank { stringResource(R.string.diag_unknown) }
                 )
             }
 
@@ -194,9 +233,49 @@ fun DiagnosticScreen(
 }
 
 @Composable
+private fun boolLabel(value: Boolean?): String = when (value) {
+    null -> stringResource(R.string.diag_unknown)
+    true -> stringResource(R.string.diag_yes)
+    false -> stringResource(R.string.diag_no)
+}
+
+@Composable
+private fun optBoolLabel(value: Boolean?): String = boolLabel(value)
+
+@Composable
+private fun portLabel(value: Boolean?): String = when (value) {
+    null -> stringResource(R.string.diag_unknown)
+    true -> stringResource(R.string.diag_port_open)
+    false -> stringResource(R.string.diag_port_closed)
+}
+
+@Composable
+private fun probeLabel(value: TunnelDiagnostics.Probe): String = when (value) {
+    TunnelDiagnostics.Probe.OK -> stringResource(R.string.diag_probe_ok)
+    TunnelDiagnostics.Probe.HTTP -> stringResource(R.string.diag_probe_http)
+    TunnelDiagnostics.Probe.RELAY -> stringResource(R.string.diag_probe_relay)
+    TunnelDiagnostics.Probe.AUTH -> stringResource(R.string.diag_probe_auth)
+    TunnelDiagnostics.Probe.PORT_CLOSED -> stringResource(R.string.diag_probe_port_closed)
+    TunnelDiagnostics.Probe.UNKNOWN -> stringResource(R.string.diag_probe_none)
+}
+
+private fun formatBytes(bytes: Long): String {
+    var value = bytes.coerceAtLeast(0L).toDouble()
+    val units = arrayOf("o", "Ko", "Mo", "Go", "To")
+    var index = 0
+    while (value >= 1024 && index < units.lastIndex) {
+        value /= 1024
+        index++
+    }
+    return if (index == 0) "${value.toInt()} ${units[index]}"
+    else "%.1f %s".format(value, units[index])
+}
+
+@Composable
 private fun stateLabel(status: VpnStatus): String = when (status.state) {
     VpnState.CONNECTED -> stringResource(R.string.status_connected)
     VpnState.CONNECTING -> stringResource(R.string.status_connecting)
+    VpnState.VERIFYING -> stringResource(R.string.status_verifying)
     VpnState.STOPPING -> stringResource(R.string.status_stopping)
     VpnState.ERROR -> stringResource(R.string.status_error)
     VpnState.STOPPED -> stringResource(R.string.status_disconnected)

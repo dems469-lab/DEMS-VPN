@@ -4,7 +4,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-enum class VpnState { STOPPED, CONNECTING, CONNECTED, STOPPING, ERROR }
+enum class VpnState { STOPPED, CONNECTING, VERIFYING, CONNECTED, STOPPING, ERROR }
 
 data class VpnStatus(
     val state: VpnState = VpnState.STOPPED,
@@ -19,7 +19,8 @@ data class VpnStatus(
     val reconnects: Int = 0
 ) {
     val busy: Boolean
-        get() = state == VpnState.CONNECTING || state == VpnState.CONNECTED || state == VpnState.STOPPING
+        get() = state == VpnState.CONNECTING || state == VpnState.VERIFYING ||
+            state == VpnState.CONNECTED || state == VpnState.STOPPING
 }
 
 /** État partagé entre le service VPN et l'interface (même processus). */
@@ -31,6 +32,13 @@ object VpnController {
     fun connecting(serverName: String, resetSession: Boolean = false) {
         val keep = if (resetSession) 0 else _status.value.reconnects
         _status.value = VpnStatus(VpnState.CONNECTING, serverName, reconnects = keep)
+    }
+
+    /** Le pipeline tourne : le tunnel est en cours de vérification réelle. */
+    fun verifying(serverName: String = _status.value.serverName) {
+        val current = _status.value
+        if (current.state in listOf(VpnState.STOPPED, VpnState.STOPPING, VpnState.ERROR)) return
+        _status.value = current.copy(state = VpnState.VERIFYING, serverName = serverName)
     }
 
     fun connected(serverName: String) {

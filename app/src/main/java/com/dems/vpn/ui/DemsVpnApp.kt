@@ -38,6 +38,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dems.vpn.R
 import com.dems.vpn.data.Profile
 import com.dems.vpn.data.SettingsStore
+import com.dems.vpn.service.TunnelDiagnostics
 import com.dems.vpn.service.VpnState
 import kotlinx.coroutines.launch
 
@@ -65,6 +66,7 @@ fun DemsVpnApp(
     val speedSample by viewModel.speedSample.collectAsStateWithLifecycle()
     val speedTesting by viewModel.speedTesting.collectAsStateWithLifecycle()
     val deviceKey by viewModel.deviceKey.collectAsStateWithLifecycle()
+    val tunnelDiag by TunnelDiagnostics.state.collectAsStateWithLifecycle()
 
     var unlocked by rememberSaveable { mutableStateOf(false) }
     val pinSet = settings.appLockPin.isNotBlank()
@@ -186,6 +188,7 @@ fun DemsVpnApp(
 
                 ROUTE_DIAGNOSTIC -> DiagnosticScreen(
                     status = status,
+                    tunnel = tunnelDiag,
                     profile = selected,
                     latency = selected?.let { latencies[it.id] },
                     deviceKey = deviceKey,
@@ -208,6 +211,7 @@ fun DemsVpnApp(
                         when (status.state) {
                             VpnState.CONNECTED,
                             VpnState.CONNECTING,
+                            VpnState.VERIFYING,
                             VpnState.STOPPING -> onDisconnect()
 
                             else -> {

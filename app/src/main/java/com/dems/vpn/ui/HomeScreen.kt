@@ -155,11 +155,13 @@ private fun ConnectCard(
     searching: Boolean,
     onToggle: () -> Unit
 ) {
-    val busy = status.state == VpnState.CONNECTING || status.state == VpnState.STOPPING
+    val busy = status.state == VpnState.CONNECTING ||
+        status.state == VpnState.VERIFYING || status.state == VpnState.STOPPING
     val statusLabel = stringResource(
         when (status.state) {
             VpnState.CONNECTED -> R.string.status_connected
             VpnState.CONNECTING -> R.string.status_connecting
+            VpnState.VERIFYING -> R.string.status_verifying
             VpnState.STOPPING -> R.string.status_stopping
             VpnState.ERROR -> R.string.status_error
             VpnState.STOPPED -> R.string.status_disconnected
@@ -249,6 +251,7 @@ private fun ConnectCard(
                     status.state == VpnState.CONNECTING ->
                         if (status.reconnects > 0) stringResource(R.string.status_reconnecting)
                         else stringResource(R.string.status_connecting)
+                    status.state == VpnState.VERIFYING -> stringResource(R.string.status_verifying)
                     status.state == VpnState.STOPPING -> stringResource(R.string.status_stopping)
                     else -> stringResource(R.string.hint_tap_connect)
                 },
