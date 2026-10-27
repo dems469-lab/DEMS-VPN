@@ -1,0 +1,27 @@
+DEMS VPN
+Copyright (C) 2026 DEMS VPN contributors
+
+This program is free software: you can redistribute it and/or modify it under the
+terms of the GNU General Public License as published by the Free Software Foundation,
+either version 3 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this
+program. If not, see <https://www.gnu.org/licenses/>.
+
+---
+
+Third-party components used at build time (downloaded, not vendored):
+
+- Xray-core — Mozilla Public License 2.0 — https://github.com/XTLS/Xray-core
+- AndroidLibXrayLite (libv2ray.aar) — GNU LGPL-3.0 — https://github.com/2dust/AndroidLibXrayLite
+- hev-socks5-tunnel (hev-socks5-tunnel.aar) — MIT — https://github.com/heiher/hev-socks5-tunnel
+- v2rayNG — GPL-3.0 — https://github.com/2dust/v2rayNG (integration reference)
+
+The integration approach (VpnService + local SOCKS core + tun2socks) follows v2rayNG,
+which is licensed under GPL-3.0; this project is therefore distributed under GPL-3.0.
+
+DEMS VPN is an independent project and is not affiliated with 2dust, XTLS or heiher.

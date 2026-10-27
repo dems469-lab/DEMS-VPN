@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DEMS VPN</string>
+    <string name="tagline">Xray · TUN</string>
+
+    <string name="status_connected">Connecté</string>
+    <string name="status_connecting">Connexion…</string>
+    <string name="status_stopping">Déconnexion…</string>
+    <string name="status_disconnected">Déconnecté</string>
+    <string name="status_error">Erreur</string>
+
+    <string name="hint_tap_connect">Appuyez pour vous connecter</string>
+    <string name="hint_tap_disconnect">Appuyez pour vous déconnecter</string>
+    <string name="label_server">Serveur</string>
+    <string name="label_mode">Mode</string>
+    <string name="mode_value">TUN · Xray</string>
+    <string name="no_server">Aucun serveur</string>
+    <string name="no_server_hint">Ajoutez un serveur pour démarrer</string>
+    <string name="add_server">Ajouter un serveur</string>
+    <string name="core_label">Cœur</string>
+
+    <string name="servers_title">Serveurs</string>
+    <string name="servers_empty">Aucun serveur pour le moment.\nAjoutez un lien vless://, vmess://, trojan:// ou ss://.</string>
+    <string name="import_link">Importer un lien</string>
+    <string name="link_hint">vless://… · vmess://… · trojan://… · ss://…</string>
+    <string name="paste">Coller</string>
+    <string name="import">Importer</string>
+    <string name="cancel">Annuler</string>
+    <string name="delete">Supprimer</string>
+    <string name="selected">Sélectionné</string>
+    <string name="import_ok">Serveur importé</string>
+    <string name="delete_ok">Serveur supprimé</string>
+    <string name="error_no_server">Ajoutez d\'abord un serveur</string>
+    <string name="error_import">Lien non reconnu</string>
+    <string name="error_duplicate">Ce serveur est déjà importé</string>
+    <string name="error_vpn_permission">Permission VPN refusée</string>
+    <string name="error_tun">Impossible de créer l\'interface VPN</string>
+    <string name="error_tun2socks">tun2socks n\'a pas démarré</string>
+    <string name="error_profile">Serveur introuvable</string>
+
+    <string name="settings_title">Paramètres</string>
+    <string name="settings_network">Réseau</string>
+    <string name="settings_dns">DNS</string>
+    <string name="settings_dns_hint">1.1.1.1</string>
+    <string name="settings_mtu">MTU</string>
+    <string name="settings_mtu_hint">1500</string>
+    <string name="settings_ipv6">IPv6</string>
+    <string name="settings_ipv6_desc">Router aussi le trafic IPv6 dans le tunnel</string>
+    <string name="settings_quic">Bloquer QUIC (UDP 443)</string>
+    <string name="settings_quic_desc">Force HTTP/3 à repasser en TCP</string>
+    <string name="settings_about">À propos</string>
+    <string name="settings_version">Version</string>
+    <string name="settings_core">Cœur Xray</string>
+    <string name="settings_license">Licence</string>
+    <string name="settings_license_value">GPL-3.0 · basé sur v2rayNG / Xray-core</string>
+    <string name="settings_note">Base de client VPN. Le cœur Xray tourne en local et le trafic passe par un tunnel TUN (tun2socks).</string>
+
+    <string name="notification_channel">État de la connexion</string>
+    <string name="notification_connecting">Connexion en cours…</string>
+    <string name="notification_connected">Connecté à %1$s</string>
+    <string name="notification_disconnect">Déconnecter</string>
+</resources>

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DEMS VPN</string>
+    <string name="tagline">Xray · TUN</string>
+
+    <string name="status_connected">Connected</string>
+    <string name="status_connecting">Connecting…</string>
+    <string name="status_stopping">Disconnecting…</string>
+    <string name="status_disconnected">Disconnected</string>
+    <string name="status_error">Error</string>
+
+    <string name="hint_tap_connect">Tap to connect</string>
+    <string name="hint_tap_disconnect">Tap to disconnect</string>
+    <string name="label_server">Server</string>
+    <string name="label_mode">Mode</string>
+    <string name="mode_value">TUN · Xray</string>
+    <string name="no_server">No server</string>
+    <string name="no_server_hint">Add a server to get started</string>
+    <string name="add_server">Add a server</string>
+    <string name="core_label">Core</string>
+
+    <string name="servers_title">Servers</string>
+    <string name="servers_empty">No servers yet.\nAdd a vless://, vmess://, trojan:// or ss:// link.</string>
+    <string name="import_link">Import a link</string>
+    <string name="link_hint">vless://… · vmess://… · trojan://… · ss://…</string>
+    <string name="paste">Paste</string>
+    <string name="import">Import</string>
+    <string name="cancel">Cancel</string>
+    <string name="delete">Delete</string>
+    <string name="selected">Selected</string>
+    <string name="import_ok">Server imported</string>
+    <string name="delete_ok">Server deleted</string>
+    <string name="error_no_server">Add a server first</string>
+    <string name="error_import">Unrecognized link</string>
+    <string name="error_duplicate">This server is already imported</string>
+    <string name="error_vpn_permission">VPN permission denied</string>
+    <string name="error_tun">Could not create the VPN interface</string>
+    <string name="error_tun2socks">tun2socks failed to start</string>
+    <string name="error_profile">Server not found</string>
+
+    <string name="settings_title">Settings</string>
+    <string name="settings_network">Network</string>
+    <string name="settings_dns">DNS</string>
+    <string name="settings_dns_hint">1.1.1.1</string>
+    <string name="settings_mtu">MTU</string>
+    <string name="settings_mtu_hint">1500</string>
+    <string name="settings_ipv6">IPv6</string>
+    <string name="settings_ipv6_desc">Also route IPv6 traffic through the tunnel</string>
+    <string name="settings_quic">Block QUIC (UDP 443)</string>
+    <string name="settings_quic_desc">Forces HTTP/3 back to TCP</string>
+    <string name="settings_about">About</string>
+    <string name="settings_version">Version</string>
+    <string name="settings_core">Xray core</string>
+    <string name="settings_license">License</string>
+    <string name="settings_license_value">GPL-3.0 · based on v2rayNG / Xray-core</string>
+    <string name="settings_note">VPN client base. The Xray core runs locally and traffic goes through a TUN interface (tun2socks).</string>
+
+    <string name="notification_channel">Connection status</string>
+    <string name="notification_connecting">Connecting…</string>
+    <string name="notification_connected">Connected to %1$s</string>
+    <string name="notification_disconnect">Disconnect</string>
+</resources>
