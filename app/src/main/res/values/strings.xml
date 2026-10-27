@@ -34,6 +34,12 @@
     <string name="status_connecting">Connexion…</string>
     <string name="status_stopping">Déconnexion…</string>
     <string name="status_disconnected">Déconnecté</string>
+    <string name="status_reconnecting">Reconnexion…</string>
+    <string name="error_reconnect_failed">Reconnexion impossible après 8 tentatives</string>
+    <string name="battery_title">Éviter les coupures</string>
+    <string name="battery_body">Pour que le VPN reste actif écran éteint, autorise DEMS VPN à ignorer l\'optimisation de batterie d\'Android. Sans cela, le système peut couper le tunnel en arrière-plan.</string>
+    <string name="battery_allow">Autoriser</string>
+    <string name="battery_later">Plus tard</string>
     <string name="status_error">Erreur</string>
 
     <string name="hint_tap_connect">Appuyez pour vous connecter</string>

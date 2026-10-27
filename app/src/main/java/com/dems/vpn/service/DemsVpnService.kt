@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.Network
+import android.net.NetworkCapabilities
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
 import android.os.PowerManager
@@ -34,6 +35,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
+import java.io.InputStream
+import java.net.InetSocketAddress
+import java.net.Socket
 
 /**
  * Service VPN : crée l'interface TUN, démarre Xray (proxy local) puis
@@ -56,8 +60,15 @@ class DemsVpnService : VpnService() {
         private const val DNS_IPV6 = "2606:4700:4700::1111"
 
         private const val STATS_INTERVAL_MS = 2_000L
-        private const val RECONNECT_DEBOUNCE_MS = 1_500L
         private const val RECONNECT_MIN_UPTIME_MS = 5_000L
+        private const val RECONNECT_MAX_ATTEMPTS = 8
+        private const val RECONNECT_MAX_DELAY_MS = 30_000L
+        private const val STABLE_RESET_MS = 60_000L
+
+        private const val WATCHDOG_INTERVAL_MS = 20_000L
+        private const val WATCHDOG_MAX_FAILURES = 2
+        private const val PROBE_TIMEOUT_MS = 5_000
+        private const val WAKE_LOCK_TIMEOUT_MS = 10 * 60 * 1000L
 
         fun start(context: Context, profileId: String?) {
             val intent = Intent(context, DemsVpnService::class.java)
@@ -82,6 +93,14 @@ class DemsVpnService : VpnService() {
 
     private var scope: CoroutineScope? = null
     private var statsJob: Job? = null
+    private var watchdogJob: Job? = null
+    private var watchdogFailures = 0
+    @Volatile private var backoffAttempt = 0
+
+    // Identifiants du proxy local, conservés pour la sonde du watchdog.
+    private var activeSocksUser: String = ""
+    private var activeSocksPass: String = ""
+    private var activeSocksPort: Int = 10808
     private var wakeLock: PowerManager.WakeLock? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
@@ -96,6 +115,18 @@ class DemsVpnService : VpnService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
             stopVpn()
+            return START_NOT_STICKY
+        }
+
+        // Redémarrage système (START_STICKY, intent null) : ne relancer que si
+        // l'utilisateur était connecté au moment de la mort du processus.
+        if (intent == null && !SettingsStore.wasConnected()) {
+            startForeground(
+                NOTIFICATION_ID,
+                buildNotification(getString(R.string.notification_connecting))
+            )
+            stopForegroundCompat()
+            stopSelf()
             return START_NOT_STICKY
         }
 
@@ -158,17 +189,13 @@ class DemsVpnService : VpnService() {
 
     // ------------------------------------------------------------- Démarrage
 
-    private fun startVpn(profileId: String) {
+    private fun startVpn(profileId: String, retrying: Boolean = false): Boolean {
         val profile = ProfileStore.find(profileId)
-        if (profile == null) {
-            fail(getString(R.string.error_profile))
-            return
-        }
+        if (profile == null) return abort(retrying, R.string.error_profile)
         val settings = SettingsStore.current()
 
         if (VpnService.prepare(this) != null) {
-            fail(getString(R.string.error_vpn_permission))
-            return
+            return abort(retrying, R.string.error_vpn_permission)
         }
 
         val socksUser = SettingsStore.sessionToken()
@@ -203,49 +230,72 @@ class DemsVpnService : VpnService() {
             Log.e(TAG, "establish()", t)
             null
         }
-        if (descriptor == null) {
-            fail(getString(R.string.error_tun))
-            return
-        }
+        if (descriptor == null) return abort(retrying, R.string.error_tun)
         tun = descriptor
 
         if (stopRequested) {
             cleanup()
-            return
+            return false
         }
+
+        activeSocksUser = socksUser
+        activeSocksPass = socksPass
+        activeSocksPort = settings.socksPort
 
         acquireWakeLock(settings)
 
         val startResult = XrayCore.start(this, config)
         if (startResult.isFailure) {
-            fail("Xray : ${startResult.exceptionOrNull()?.message ?: "échec du démarrage"}")
-            return
+            return abortMessage(
+                retrying,
+                "Xray : ${startResult.exceptionOrNull()?.message ?: "échec du démarrage"}"
+            )
         }
 
         if (stopRequested) {
             cleanup()
-            return
+            return false
         }
 
         if (!startTun2Socks(descriptor, settings, socksUser, socksPass)) {
-            fail(getString(R.string.error_tun2socks))
-            return
+            return abort(retrying, R.string.error_tun2socks)
         }
 
         if (stopRequested) {
             cleanup()
-            return
+            return false
         }
 
         running = true
         connectedAt = SystemClock.elapsedRealtime()
         currentProfileId = profileId
         currentProfileName = profile.name
+        SettingsStore.setWasConnected(true)
         VpnController.connected(profile.name)
         updateNotification(getString(R.string.notification_connected, profile.name))
 
         registerNetworkCallback()
         startStatsLoop()
+        startWatchdog()
+        return true
+    }
+
+    /**
+     * Échec pendant une reconnexion : on ne coupe pas le service, on laisse la
+     * boucle de retry (backoff) relancer une tentative. En connexion initiale,
+     * l'erreur est remontée à l'utilisateur.
+     */
+    private fun abort(retrying: Boolean, messageRes: Int): Boolean =
+        abortMessage(retrying, getString(messageRes))
+
+    private fun abortMessage(retrying: Boolean, message: String): Boolean {
+        if (retrying) {
+            Log.w(TAG, "Tentative de reconnexion échouée : $message")
+            runCatching { stopPipeline() }
+        } else {
+            fail(message)
+        }
+        return false
     }
 
     /**
@@ -375,9 +425,26 @@ class DemsVpnService : VpnService() {
         val manager = getSystemService(ConnectivityManager::class.java) ?: return
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
+                bindUnderlying(network)
                 // Ignore l'événement déclenché juste après l'enregistrement.
                 if (SystemClock.elapsedRealtime() - connectedAt < RECONNECT_MIN_UPTIME_MS) return
                 scheduleReconnect("réseau disponible")
+            }
+
+            override fun onLost(network: Network) {
+                if (SystemClock.elapsedRealtime() - connectedAt < RECONNECT_MIN_UPTIME_MS) return
+                scheduleReconnect("réseau perdu")
+            }
+
+            override fun onCapabilitiesChanged(
+                network: Network,
+                capabilities: NetworkCapabilities
+            ) {
+                if (!capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
+                    scheduleReconnect("réseau sans Internet")
+                } else {
+                    bindUnderlying(network)
+                }
             }
         }
         networkCallback = callback
@@ -386,6 +453,12 @@ class DemsVpnService : VpnService() {
                 Log.w(TAG, "Suivi réseau indisponible", it)
                 networkCallback = null
             }
+    }
+
+    /** Lie les sockets du tunnel au réseau courant (Wi-Fi ou 4G). */
+    private fun bindUnderlying(network: Network) {
+        runCatching { setUnderlyingNetworks(arrayOf(network)) }
+            .onFailure { Log.w(TAG, "setUnderlyingNetworks refusé", it) }
     }
 
     private fun unregisterNetworkCallback() {
@@ -397,7 +470,10 @@ class DemsVpnService : VpnService() {
 
     /**
      * Après un changement de réseau (Wi-Fi ↔ 4G), les sockets du cœur sont
-     * souvent mortes : on relance proprement tout le tunnel.
+     * souvent mortes : on relance le tunnel avec un backoff exponentiel
+     * (1, 2, 4, 8… 30 s), 8 tentatives maximum. Un échec ne coupe plus le
+     * service : la boucle réessaie. Le compteur repart à zéro après 60 s
+     * de connexion stable.
      */
     private fun scheduleReconnect(reason: String) {
         if (!running || reconnecting) return
@@ -406,13 +482,29 @@ class DemsVpnService : VpnService() {
         reconnecting = true
         scope?.launch {
             try {
-                delay(RECONNECT_DEBOUNCE_MS)
-                if (!running) return@launch
-                Log.i(TAG, "Reconnexion ($reason)")
-                VpnController.reconnectAttempt()
-                VpnController.connecting(currentProfileName)
-                stopPipeline()
-                startVpn(profileId)
+                while (!stopRequested) {
+                    backoffAttempt++
+                    if (backoffAttempt > RECONNECT_MAX_ATTEMPTS) {
+                        fail(getString(R.string.error_reconnect_failed))
+                        return@launch
+                    }
+                    VpnController.reconnectAttempt()
+                    VpnController.connecting(currentProfileName)
+                    updateNotification(getString(R.string.status_reconnecting))
+                    Log.i(TAG, "Reconnexion #$backoffAttempt ($reason)")
+                    stopPipeline()
+
+                    val ok = runCatching { startVpn(profileId, retrying = true) }
+                        .getOrDefault(false)
+                    if (ok) {
+                        Log.i(TAG, "Reconnexion réussie (#$backoffAttempt)")
+                        return@launch
+                    }
+
+                    val wait = backoffDelayMs(backoffAttempt)
+                    Log.w(TAG, "Échec, nouvelle tentative dans ${wait / 1000} s")
+                    delay(wait)
+                }
             } catch (t: Throwable) {
                 Log.e(TAG, "Reconnexion impossible", t)
                 fail(t.message ?: getString(R.string.error_tun))
@@ -422,10 +514,140 @@ class DemsVpnService : VpnService() {
         }
     }
 
+    private fun backoffDelayMs(attempt: Int): Long {
+        val shift = (attempt - 1).coerceIn(0, 20)
+        return (1_000L shl shift).coerceAtMost(RECONNECT_MAX_DELAY_MS)
+    }
+
+    // ------------------------------------------------------- Watchdog santé
+
+    /**
+     * Toutes les 20 s : le cœur tourne-t-il, et le tunnel transporte-t-il
+     * vraiment du trafic ? La sonde passe par le proxy SOCKS local (donc par
+     * Xray et le serveur) : un simple `isRunning` ne suffit pas, le cœur peut
+     * être vivant avec des sockets mortes après un changement de réseau.
+     * Deux échecs consécutifs déclenchent une reconnexion.
+     */
+    private fun startWatchdog() {
+        watchdogJob?.cancel()
+        watchdogFailures = 0
+        watchdogJob = scope?.launch {
+            while (!stopRequested) {
+                delay(WATCHDOG_INTERVAL_MS)
+                if (!running) continue
+
+                renewWakeLock()
+                if (SystemClock.elapsedRealtime() - connectedAt >= STABLE_RESET_MS) {
+                    backoffAttempt = 0
+                }
+
+                val healthy = XrayCore.isRunning() && probeTunnel()
+                if (healthy) {
+                    watchdogFailures = 0
+                    continue
+                }
+
+                watchdogFailures++
+                Log.w(
+                    TAG,
+                    "Watchdog : tunnel non réactif ($watchdogFailures/$WATCHDOG_MAX_FAILURES)"
+                )
+                if (watchdogFailures >= WATCHDOG_MAX_FAILURES) {
+                    watchdogFailures = 0
+                    scheduleReconnect("watchdog")
+                }
+            }
+        }
+    }
+
+    /**
+     * Requête HTTP réelle à travers le SOCKS local (auth incluse), sans passer
+     * par le réseau de l'application : preuve que TUN → hev → Xray → serveur
+     * fonctionne. Test léger (204 attendu), timeout 5 s.
+     */
+    private fun probeTunnel(): Boolean = runCatching {
+        Socket().use { socket ->
+            socket.connect(InetSocketAddress("127.0.0.1", activeSocksPort), PROBE_TIMEOUT_MS)
+            socket.soTimeout = PROBE_TIMEOUT_MS
+            val out = socket.getOutputStream()
+            val input = socket.getInputStream()
+
+            // Négociation : sans auth + utilisateur/mot de passe.
+            out.write(byteArrayOf(0x05, 0x02, 0x00, 0x02))
+            out.flush()
+            val greeting = ByteArray(2)
+            if (!readFully(input, greeting)) return false
+            if (greeting[0].toInt() != 0x05) return false
+
+            when (greeting[1].toInt()) {
+                0x02 -> {
+                    val user = activeSocksUser.toByteArray()
+                    val pass = activeSocksPass.toByteArray()
+                    out.write(
+                        byteArrayOf(0x01, user.size.toByte(), *user, pass.size.toByte(), *pass)
+                    )
+                    out.flush()
+                    val auth = ByteArray(2)
+                    if (!readFully(input, auth)) return false
+                    if (auth[1].toInt() != 0x00) return false
+                }
+                0x00 -> Unit
+                else -> return false
+            }
+
+            // CONNECT connectivitycheck.gstatic.com:80 (résolution par le proxy).
+            val host = "connectivitycheck.gstatic.com"
+            val hostBytes = host.toByteArray()
+            out.write(
+                byteArrayOf(
+                    0x05, 0x01, 0x00, 0x03, hostBytes.size.toByte(), *hostBytes, 0x00, 0x50
+                )
+            )
+            out.flush()
+
+            val reply = ByteArray(4)
+            if (!readFully(input, reply)) return false
+            if (reply[1].toInt() != 0x00) return false
+
+            val atyp = reply[3].toInt() and 0xFF
+            val addrLen = when (atyp) {
+                0x01 -> 4
+                0x03 -> {
+                    val length = input.read()
+                    if (length < 0) return false
+                    length
+                }
+                0x04 -> 16
+                else -> return false
+            }
+            if (!readFully(input, ByteArray(addrLen + 2))) return false
+
+            val request = "GET /generate_204 HTTP/1.1\r\nHost: $host\r\n" +
+                "Connection: close\r\n\r\n"
+            out.write(request.toByteArray())
+            out.flush()
+
+            val status = input.bufferedReader().readLine() ?: return false
+            status.startsWith("HTTP/1.") || status.startsWith("HTTP/2")
+        }
+    }.getOrDefault(false)
+
+    private fun readFully(input: InputStream, buffer: ByteArray): Boolean {
+        var read = 0
+        while (read < buffer.size) {
+            val count = input.read(buffer, read, buffer.size - read)
+            if (count < 0) return false
+            read += count
+        }
+        return true
+    }
+
     // ---------------------------------------------------------------- Arrêt
 
     private fun stopVpn() {
         stopRequested = true
+        SettingsStore.setWasConnected(false)
+        backoffAttempt = 0
         VpnController.stopping()
         cleanup()
         VpnController.stopped()
@@ -438,6 +660,9 @@ class DemsVpnService : VpnService() {
         running = false
         statsJob?.cancel()
         statsJob = null
+        watchdogJob?.cancel()
+        watchdogJob = null
+        watchdogFailures = 0
         runCatching { TProxyService.TProxyStopService() }
         XrayCore.stop()
         closeTun()
@@ -456,6 +681,8 @@ class DemsVpnService : VpnService() {
 
     private fun fail(message: String) {
         stopRequested = true
+        SettingsStore.setWasConnected(false)
+        backoffAttempt = 0
         Log.e(TAG, message)
         VpnController.error(message)
         cleanup()
@@ -477,10 +704,19 @@ class DemsVpnService : VpnService() {
             "dems:vpn"
         ).apply { setReferenceCounted(false) }
         wakeLock = lock
-        if (!lock.isHeld) {
-            runCatching { lock.acquire() }
-                .onFailure { Log.w(TAG, "WakeLock refusé", it) }
-        }
+        renewWakeLock()
+    }
+
+    /**
+     * Le WakeLock est volontairement borné dans le temps et renouvelé par le
+     * watchdog : s'il n'est plus rafraîchi (processus figé), Android le rend.
+     */
+    private fun renewWakeLock() {
+        val lock = wakeLock ?: return
+        runCatching {
+            if (lock.isHeld) lock.release()
+            lock.acquire(WAKE_LOCK_TIMEOUT_MS)
+        }.onFailure { Log.w(TAG, "WakeLock refusé", it) }
     }
 
     private fun releaseWakeLock() {

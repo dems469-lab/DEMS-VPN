@@ -131,6 +131,26 @@ object SettingsStore {
         Base64.decode(value, Base64.NO_WRAP or Base64.URL_SAFE or Base64.NO_PADDING).size
     }.getOrDefault(-1)
 
+    // --------------------------------------------------- État de session
+
+    /**
+     * Vrai si l'utilisateur était connecté au moment de la mort du processus.
+     * Sert à START_STICKY : ne pas ressusciter un VPN que l'utilisateur avait
+     * arrêté, mais reprendre une session interrompue.
+     */
+    fun wasConnected(): Boolean = prefs.getBoolean("was_connected", false)
+
+    fun setWasConnected(value: Boolean) {
+        prefs.edit().putBoolean("was_connected", value).apply()
+    }
+
+    /** L'écran d'exclusion batterie n'est proposé qu'une seule fois. */
+    fun batteryPromptShown(): Boolean = prefs.getBoolean("battery_prompt_shown", false)
+
+    fun markBatteryPromptShown() {
+        prefs.edit().putBoolean("battery_prompt_shown", true).apply()
+    }
+
     // ------------------------------------------------------------ Code PIN
 
     fun setPin(pin: String) {

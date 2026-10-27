@@ -246,7 +246,9 @@ private fun ConnectCard(
                 text = when {
                     connected -> formatDuration(elapsed)
                     searching -> stringResource(R.string.auto_bench_searching)
-                    status.state == VpnState.CONNECTING -> stringResource(R.string.status_connecting)
+                    status.state == VpnState.CONNECTING ->
+                        if (status.reconnects > 0) stringResource(R.string.status_reconnecting)
+                        else stringResource(R.string.status_connecting)
                     status.state == VpnState.STOPPING -> stringResource(R.string.status_stopping)
                     else -> stringResource(R.string.hint_tap_connect)
                 },

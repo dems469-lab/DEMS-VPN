@@ -34,6 +34,12 @@
     <string name="status_connecting">Connecting…</string>
     <string name="status_stopping">Disconnecting…</string>
     <string name="status_disconnected">Disconnected</string>
+    <string name="status_reconnecting">Reconnecting…</string>
+    <string name="error_reconnect_failed">Reconnect failed after 8 attempts</string>
+    <string name="battery_title">Avoid disconnections</string>
+    <string name="battery_body">To keep the VPN alive with the screen off, allow DEMS VPN to ignore Android battery optimisation. Otherwise the system may cut the tunnel in the background.</string>
+    <string name="battery_allow">Allow</string>
+    <string name="battery_later">Later</string>
     <string name="status_error">Error</string>
 
     <string name="hint_tap_connect">Tap to connect</string>

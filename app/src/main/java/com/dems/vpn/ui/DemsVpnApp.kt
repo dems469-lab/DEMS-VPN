@@ -1,13 +1,22 @@
 package com.dems.vpn.ui
 
+import android.content.Intent
+import android.net.Uri
+import android.os.PowerManager
 import android.os.SystemClock
+import android.provider.Settings
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
@@ -20,6 +29,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -108,6 +118,33 @@ fun DemsVpnApp(
         scope.launch { snackbarHostState.showSnackbar(message) }
     }
 
+    // Exclusion batterie : proposée une seule fois, à la première connexion.
+    val context = LocalContext.current
+    var pendingConnect by remember { mutableStateOf<Profile?>(null) }
+    var showBatteryDialog by remember { mutableStateOf(false) }
+    val batteryLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { }
+
+    val proceedConnect: () -> Unit = {
+        val profile = pendingConnect
+        pendingConnect = null
+        showBatteryDialog = false
+        SettingsStore.markBatteryPromptShown()
+        if (profile != null) onConnect(profile)
+    }
+
+    val beginConnect: (Profile) -> Unit = { profile ->
+        val power = context.getSystemService(PowerManager::class.java)
+        val ignoring = power?.isIgnoringBatteryOptimizations(context.packageName) ?: true
+        if (!ignoring && !SettingsStore.batteryPromptShown()) {
+            pendingConnect = profile
+            showBatteryDialog = true
+        } else {
+            onConnect(profile)
+        }
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -177,8 +214,8 @@ fun DemsVpnApp(
                                 val current = selected
                                 when {
                                     current == null -> notify(noServerMessage)
-                                    searching -> viewModel.cancelSearch { profile -> onConnect(profile) }
-                                    else -> viewModel.connectSmart { profile -> onConnect(profile) }
+                                    searching -> viewModel.cancelSearch(beginConnect)
+                                    else -> viewModel.connectSmart(beginConnect)
                                 }
                             }
                         }
@@ -188,6 +225,36 @@ fun DemsVpnApp(
                 )
             }
         }
+    }
+
+    if (showBatteryDialog) {
+        AlertDialog(
+            onDismissRequest = proceedConnect,
+            title = { Text(stringResource(R.string.battery_title)) },
+            text = { Text(stringResource(R.string.battery_body)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        runCatching {
+                            batteryLauncher.launch(
+                                Intent(
+                                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                    Uri.parse("package:" + context.packageName)
+                                )
+                            )
+                        }
+                        proceedConnect()
+                    }
+                ) {
+                    Text(stringResource(R.string.battery_allow))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = proceedConnect) {
+                    Text(stringResource(R.string.battery_later))
+                }
+            }
+        )
     }
 
     BackHandler(enabled = route != ROUTE_HOME) {
