@@ -1,23 +1,86 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Session diagnostics -->
+    <string name="diag_title">Diagnostics</string>
+    <string name="diag_session">Session</string>
+    <string name="diag_state">State</string>
+    <string name="diag_server">Server</string>
+    <string name="diag_uptime">Connection time</string>
+    <string name="diag_reconnects">Reconnects (session)</string>
+    <string name="diag_core">Xray core</string>
+    <string name="diag_app">Application</string>
+    <string name="diag_measures">Measurements</string>
+    <string name="diag_latency">Latency</string>
+    <string name="diag_latency_test">Measure</string>
+    <string name="diag_speed">Throughput (10 s average)</string>
+    <string name="diag_speed_hint">No measurement yet</string>
+    <string name="diag_speed_running">Measuring…</string>
+    <string name="diag_speed_result">↓ %1$s · ↑ %2$s (%3$d s)</string>
+    <string name="diag_speed_test">Test 10 s</string>
+    <string name="diag_key">XUDP key</string>
+    <string name="diag_key_size">Decoded size</string>
+    <string name="diag_key_ok">%1$d bytes — correct</string>
+    <string name="diag_key_bad">%1$d bytes (32 expected)</string>
+    <string name="diag_empty">—</string>
+    <string name="diag_not_measured">Not measured</string>
+    <string name="diag_tunnel">Tunnel health</string>
+    <string name="diag_core_running">Xray core running</string>
+    <string name="diag_hev_running">tun2socks (hev) started</string>
+    <string name="diag_socks_port">Local SOCKS port</string>
+    <string name="diag_probe">Xray → server (probe via local SOCKS, no TUN)</string>
+    <string name="diag_tun_path">TUN → tun2socks path</string>
+    <string name="diag_tun_path_unverified">not verified (no app traffic observed)</string>
+    <string name="diag_tun_path_verified">verified (traffic captured by TUN)</string>
+    <string name="diag_bytes_proxy">Proxy outbound bytes</string>
+    <string name="diag_underlying">Underlying network</string>
+    <string name="diag_yes">yes</string>
+    <string name="diag_no">no</string>
+    <string name="diag_unknown">—</string>
+    <string name="diag_port_open">open</string>
+    <string name="diag_port_closed">closed</string>
+    <string name="diag_probe_none">not run</string>
+    <string name="diag_probe_port_closed">local port closed</string>
+    <string name="diag_probe_auth">SOCKS handshake</string>
+    <string name="diag_probe_relay">relay (DNS or server)</string>
+    <string name="diag_probe_http">HTTP response</string>
+    <string name="diag_probe_ok">server response OK (204)</string>
+    <string name="diag_privacy">No content, domain or server identifier is logged by this screen.</string>
+    <string name="settings_open_diagnostic">Open diagnostics</string>
+    <string name="settings_open_diagnostic_desc">Connection time, latency, 10 s throughput, reconnects</string>
+
     <string name="app_name">DEMS VPN</string>
     <string name="tagline">Xray · TUN</string>
 
     <string name="status_connected">Connected</string>
     <string name="status_connecting">Connecting…</string>
+    <string name="status_verifying">Verifying…</string>
     <string name="status_stopping">Disconnecting…</string>
     <string name="status_disconnected">Disconnected</string>
+    <string name="status_reconnecting">Reconnecting…</string>
+    <string name="error_tunnel_no_traffic">Failure: tunnel without traffic</string>
+    <string name="tunnel_cause_core">Xray core not running</string>
+    <string name="tunnel_cause_port">local SOCKS port unreachable</string>
+    <string name="tunnel_cause_auth">SOCKS handshake failed</string>
+    <string name="tunnel_cause_relay">relay refused (server offline or tunnel DNS failing)</string>
+    <string name="tunnel_cause_http">no HTTP response (timed out)</string>
+    <string name="tunnel_cause_timeout">timed out</string>
+    <string name="tunnel_cause_aborted">stop requested</string>
+    <string name="error_reconnect_failed">Reconnect failed after 8 attempts</string>
+    <string name="battery_title">Avoid disconnections</string>
+    <string name="battery_body">To keep the VPN alive with the screen off, allow DEMS VPN to ignore Android battery optimisation. Otherwise the system may cut the tunnel in the background.</string>
+    <string name="battery_allow">Allow</string>
+    <string name="battery_later">Later</string>
     <string name="status_error">Error</string>
 
     <string name="hint_tap_connect">Tap to connect</string>
-    <string name="hint_tap_disconnect">Tap to disconnect</string>
     <string name="label_server">Server</string>
     <string name="label_mode">Mode</string>
     <string name="mode_value">TUN · Xray</string>
     <string name="no_server">No server</string>
-    <string name="no_server_hint">Add a server to get started</string>
     <string name="add_server">Add a server</string>
     <string name="core_label">Core</string>
+    <string name="label_download">Download</string>
+    <string name="label_upload">Upload</string>
 
     <string name="servers_title">Servers</string>
     <string name="servers_empty">No servers yet.\nAdd a vless://, vmess://, trojan:// or ss:// link.</string>
@@ -38,16 +101,104 @@
     <string name="error_tun2socks">tun2socks failed to start</string>
     <string name="error_profile">Server not found</string>
 
+    <string name="test_latency">Test latency</string>
+    <string name="latency_testing">Testing…</string>
+    <string name="auto_bench_searching">Finding the best server…</string>
+    <string name="latency_failed">Failed</string>
+    <string name="latency_ms">%1$d ms</string>
+
     <string name="settings_title">Settings</string>
-    <string name="settings_network">Network</string>
+    <string name="settings_network">Network &amp; protocol</string>
     <string name="settings_dns">DNS</string>
     <string name="settings_dns_hint">1.1.1.1</string>
+    <string name="settings_dns_help">IP (1.1.1.1), TCP (tcp://1.1.1.1) or DoH (https://…). DoT (tls://) and DoQ are not supported by the Xray core: a tls:// value is reduced to its IP.</string>
+    <string name="settings_dns_presets">Fast resolvers</string>
+    <string name="settings_fake_dns">FakeDNS</string>
+    <string name="settings_fake_dns_desc">Instant DNS answers inside the tunnel; may break some apps</string>
     <string name="settings_mtu">MTU</string>
     <string name="settings_mtu_hint">1500</string>
+    <string name="settings_mtu_desc">1500 by default; lower to 1400 or 1300 if pages fail to load</string>
     <string name="settings_ipv6">IPv6</string>
     <string name="settings_ipv6_desc">Also route IPv6 traffic through the tunnel</string>
     <string name="settings_quic">Block QUIC (UDP 443)</string>
     <string name="settings_quic_desc">Forces HTTP/3 back to TCP</string>
+
+    <string name="settings_routing">Routing &amp; tunnel</string>
+    <string name="settings_sniffing">Domain sniffing</string>
+    <string name="settings_sniffing_desc">Detects the real destination domain name</string>
+    <string name="settings_route_only">RouteOnly</string>
+    <string name="settings_route_only_desc">Use the domain for routing only, not for DNS resolution</string>
+    <string name="settings_split_direction">Per-app routing direction</string>
+    <string name="settings_split_exclude">Exclude selected apps</string>
+    <string name="settings_split_include">Only selected apps</string>
+    <string name="settings_bypass_title_exclude">Bypassed apps (outside VPN)</string>
+    <string name="settings_bypass_title_include">Allowed apps (inside VPN)</string>
+    <string name="settings_bypass_desc">Select the apps affected by the mode above</string>
+    <string name="settings_bypass_none">None selected</string>
+    <string name="settings_bypass_count">%1$d app(s) selected</string>
+    <string name="settings_choose_apps">Choose</string>
+    <string name="settings_lan">Allow LAN access</string>
+    <string name="settings_lan_desc">Exposes the HTTP proxy on Wi-Fi for a PC or another device</string>
+    <string name="settings_lan_warning">Warning: the local proxy becomes reachable by other devices on the network.</string>
+
+    <string name="settings_stealth">Anti-censorship</string>
+    <string name="settings_final_mask">Fragmentation + padding</string>
+    <string name="settings_final_mask_desc">Fragments the TLS handshake and adds random noise to make traffic unidentifiable (TCP transports only)</string>
+    <string name="settings_engine">Decision engine</string>
+    <string name="settings_auto_bench">Test servers on connect</string>
+    <string name="settings_auto_bench_desc">Measures every server and connects to the fastest one automatically — press the button again to cancel and keep the current server</string>
+    <string name="settings_speed">Speed</string>
+    <string name="settings_mux">Mux (multiplexing)</string>
+    <string name="settings_mux_desc">Concurrency 8, only applied to WS + TLS servers (never REALITY or Vision)</string>
+    <string name="settings_buffer_preset">Buffer profile</string>
+    <string name="settings_buffer_preset_desc">Stable: 32 KB TCP / 256 KB UDP · Fast: 128 KB TCP / 1024 KB UDP. Fine-tune below.</string>
+    <string name="settings_buffer_stable">Stable</string>
+    <string name="settings_buffer_fast">Fast</string>
+    <string name="settings_stability">Performance &amp; stability</string>
+    <string name="settings_reconnect">Auto reconnect</string>
+    <string name="settings_reconnect_desc">Restarts the tunnel after a Wi-Fi ↔ 4G switch</string>
+    <string name="settings_wakelock">Stay awake with screen off</string>
+    <string name="settings_wakelock_desc">Prevents Android from suspending the tunnel</string>
+    <string name="settings_tcp_buffer">TCP buffer (KB)</string>
+    <string name="settings_udp_buffer">UDP buffer (KB)</string>
+    <string name="settings_buffer_note">Values forwarded to hev (tun2socks). gzip compression does not exist in Xray: traffic is already encrypted by the protocol.</string>
+
+    <string name="settings_ports">Ports &amp; local proxies</string>
+    <string name="settings_socks_port">SOCKS5 port</string>
+    <string name="settings_http_port">HTTP port</string>
+    <string name="settings_socks_udp">UDP over SOCKS5</string>
+    <string name="settings_socks_udp_desc">Required for games, voice calls and DNS resolution; normally keep it on</string>
+    <string name="settings_http_proxy">Local HTTP proxy</string>
+    <string name="settings_http_proxy_desc">Disabled by default (hev uses SOCKS). When enabled, authentication is mandatory with the session credentials.</string>
+    <string name="settings_ports_note">Only change on a port conflict. A reconnect is required. For LAN access, SOCKS and HTTP require authentication.</string>
+
+    <string name="settings_security">Security &amp; privacy</string>
+    <string name="settings_app_lock">App lock</string>
+    <string name="settings_app_lock_desc">PIN required when opening the app</string>
+    <string name="settings_app_lock_enabled">Enabled</string>
+    <string name="settings_app_lock_disabled">Disabled</string>
+    <string name="settings_pin_set">Set</string>
+    <string name="settings_pin_remove">Remove</string>
+    <string name="settings_pin_title">Access PIN</string>
+    <string name="settings_pin_new">New PIN (4 to 8 digits)</string>
+    <string name="settings_pin_confirm">Confirm PIN</string>
+    <string name="settings_pin_error">PINs differ or are invalid (4 to 8 digits)</string>
+    <string name="settings_pin_saved">PIN saved</string>
+    <string name="settings_pin_removed">App lock disabled</string>
+    <string name="settings_tls">TLS version</string>
+    <string name="settings_tls_desc">Auto recommended; 1.3 forces modern TLS</string>
+    <string name="settings_device_id">Hardware ID (XUDP key)</string>
+    <string name="settings_device_id_desc">Sent to the core; some providers bind subscriptions to it</string>
+    <string name="settings_regenerate">Regenerate</string>
+    <string name="settings_regenerate_title">Regenerate the identifier?</string>
+    <string name="settings_regenerate_desc">The new key will be used the next time the app starts.</string>
+
+    <string name="settings_diagnostics">Diagnostics</string>
+    <string name="settings_test_url">Latency test URL</string>
+    <string name="settings_test_url_hint">https://www.gstatic.com/generate_204</string>
+    <string name="settings_log_level">Log level</string>
+    <string name="settings_log_hint">debug shows exactly where the connection blocks</string>
+
     <string name="settings_about">About</string>
     <string name="settings_version">Version</string>
     <string name="settings_core">Xray core</string>
@@ -55,8 +206,20 @@
     <string name="settings_license_value">GPL-3.0 · based on v2rayNG / Xray-core</string>
     <string name="settings_note">VPN client base. The Xray core runs locally and traffic goes through a TUN interface (tun2socks).</string>
 
+    <string name="apps_title">Bypassed apps</string>
+    <string name="apps_search">Search apps</string>
+    <string name="apps_empty">No apps found</string>
+    <string name="apps_apply">Apply</string>
+    <string name="apps_clear">Clear all</string>
+
+    <string name="lock_title">DEMS VPN is locked</string>
+    <string name="lock_hint">Access PIN</string>
+    <string name="lock_unlock">Unlock</string>
+    <string name="lock_error">Wrong PIN</string>
+
     <string name="notification_channel">Connection status</string>
     <string name="notification_connecting">Connecting…</string>
     <string name="notification_connected">Connected to %1$s</string>
     <string name="notification_disconnect">Disconnect</string>
+    <string name="notification_traffic">↓ %1$s · ↑ %2$s</string>
 </resources>
