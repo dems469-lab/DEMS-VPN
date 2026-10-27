@@ -138,13 +138,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Mesure la latence de tous les serveurs, au plus 3 instances Xray
+     * Mesure la latence de tous les serveurs, au plus 2 instances Xray
      * temporaires en parallèle (limite mémoire/CPU du téléphone).
      */
     private suspend fun benchmarkAll(): Profile? = coroutineScope {
         val settings = SettingsStore.current()
         val port = 20_000 + Random.nextInt(10_000)
-        val sims = Semaphore(3)
+        val sims = Semaphore(2)
         profiles.value
             .map { profile ->
                 async {

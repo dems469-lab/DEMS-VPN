@@ -108,6 +108,9 @@ object XrayCore {
         raw.split(';').forEach { entry ->
             val parts = entry.split(',')
             if (parts.size != 3) return@forEach
+            // Uniquement l'outbound "proxy" : compter direct/dns-out doublerait
+            // le débit affiché.
+            if (parts[0] != "proxy") return@forEach
             val value = parts[2].toLongOrNull() ?: return@forEach
             when (parts[1]) {
                 "uplink" -> up += value

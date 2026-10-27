@@ -144,6 +144,15 @@ object XrayConfigBuilder {
         }
         // Réseaux locaux en direct (imprimantes, NAS, box…).
         rules.put(fieldRule().put("ip", JSONArray(PRIVATE_IPS)).put("outboundTag", "direct"))
+        // IPv6 désactivé : tout ce qui n'est pas un réseau local v6 est bloqué,
+        // y compris si une application contourne le DNS de l'interface.
+        if (!settings.ipv6) {
+            rules.put(
+                fieldRule()
+                    .put("ip", JSONArray().put("::/0"))
+                    .put("outboundTag", "block")
+            )
+        }
         // Tout le reste dans le tunnel.
         rules.put(fieldRule().put("network", "tcp,udp").put("outboundTag", "proxy"))
 

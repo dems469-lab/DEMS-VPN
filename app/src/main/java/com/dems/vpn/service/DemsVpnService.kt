@@ -216,11 +216,12 @@ class DemsVpnService : VpnService() {
             .addRoute("0.0.0.0", 0)
             .addDnsServer(settings.numericDns())
 
-        if (settings.ipv6) {
-            builder.addAddress(CLIENT_IPV6, 126)
-            builder.addRoute("::", 0)
-            builder.addDnsServer(DNS_IPV6)
-        }
+        // IPv6 est toujours attaché au TUN, même désactivé : la route ::/0
+        // capture tout le trafic v6 pour qu'aucun paquet ne puisse sortir en
+        // direct. Quand l'option est désactivée, Xray le bloque explicitement.
+        builder.addAddress(CLIENT_IPV6, 126)
+        builder.addRoute("::", 0)
+        if (settings.ipv6) builder.addDnsServer(DNS_IPV6)
 
         applySplitTunneling(builder, settings)
 
@@ -346,13 +347,16 @@ class DemsVpnService : VpnService() {
             appendLine("tunnel:")
             appendLine("  mtu: ${settings.mtu}")
             appendLine("  ipv4: $CLIENT_IPV4")
-            if (settings.ipv6) appendLine("  ipv6: '$CLIENT_IPV6'")
+            // hev doit connaître l'adresse v6 source dès lors que le TUN porte
+            // ::/0 (sinon il rejette les paquets au lieu de les remettre à Xray).
+            appendLine("  ipv6: '$CLIENT_IPV6'")
             appendLine("socks5:")
             appendLine("  port: ${settings.socksPort}")
             appendLine("  address: 127.0.0.1")
-            // hev n'accepte que 'udp' ou 'tcp'. Quand l'UDP est désactivé,
-            // c'est l'inbound Xray (udp=false) qui refuse les associations.
-            appendLine("  udp: 'udp'")
+            // hev n'accepte que 'udp' ou 'tcp' : quand l'UDP est désactivé, on
+            // passe en 'tcp' pour rester cohérent avec l'inbound Xray (udp=false)
+            // au lieu de laisser hev tenter des associations qui seront refusées.
+            appendLine("  udp: ${if (settings.socksUdp) "'udp'" else "'tcp'"}")
             appendLine("  username: '${yamlEscape(user)}'")
             appendLine("  password: '${yamlEscape(pass)}'")
             appendLine("misc:")
