@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -54,8 +55,10 @@ import com.dems.vpn.data.Profile
 fun ServersScreen(
     profiles: List<Profile>,
     selectedId: String?,
+    latencies: Map<String, Long>,
     onSelect: (Profile) -> Unit,
     onDelete: (Profile) -> Unit,
+    onTest: (Profile) -> Unit,
     onImport: (String) -> ImportResult,
     onMessage: (String) -> Unit,
     onBack: () -> Unit
@@ -105,7 +108,9 @@ fun ServersScreen(
                     ProfileRow(
                         profile = profile,
                         selected = profile.id == selectedId,
+                        latency = latencies[profile.id],
                         onSelect = onSelect,
+                        onTest = onTest,
                         onDelete = onDelete
                     )
                 }
@@ -141,9 +146,20 @@ fun ServersScreen(
 private fun ProfileRow(
     profile: Profile,
     selected: Boolean,
+    latency: Long?,
     onSelect: (Profile) -> Unit,
+    onTest: (Profile) -> Unit,
     onDelete: (Profile) -> Unit
 ) {
+    val latencyText = if (latency == null) {
+        ""
+    } else if (latency == -2L) {
+        " · " + stringResource(R.string.latency_testing)
+    } else if (latency < 0) {
+        " · " + stringResource(R.string.latency_failed)
+    } else {
+        " · " + stringResource(R.string.latency_ms, latency)
+    }
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -172,11 +188,18 @@ private fun ProfileRow(
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = "${profile.endpoint} · ${profile.network}",
+                    text = "${profile.endpoint} · ${profile.network}$latencyText",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
+                )
+            }
+            IconButton(onClick = { onTest(profile) }) {
+                Icon(
+                    imageVector = Icons.Filled.Refresh,
+                    contentDescription = stringResource(R.string.test_latency),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             if (selected) {

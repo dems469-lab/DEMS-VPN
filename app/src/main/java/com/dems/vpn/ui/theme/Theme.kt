@@ -1,6 +1,5 @@
 package com.dems.vpn.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -8,8 +7,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFF8E8EFF),
-    onPrimary = Color(0xFF0B1020),
+    primary = Color(0xFF22D3EE),
+    onPrimary = Color(0xFF03091D),
     primaryContainer = BrandIndigo,
     onPrimaryContainer = Color.White,
     secondary = BrandCyan,
@@ -47,13 +46,15 @@ private val LightColors = lightColorScheme(
     onError = Color.White
 )
 
+/**
+ * Thème fixé « sombre marine » : le mode clair du système est ignoré
+ * (refonte accueil, maquette dark). La palette claire reste déclarée
+ * mais inutilisée tant que la refonte n'intègre pas un choix utilisateur.
+ */
 @Composable
-fun DemsVpnTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    content: @Composable () -> Unit
-) {
+fun DemsVpnTheme(content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = if (darkTheme) DarkColors else LightColors,
+        colorScheme = DarkColors,
         content = content
     )
 }

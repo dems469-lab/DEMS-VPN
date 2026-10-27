@@ -18,12 +18,20 @@ protocole, et `hev-socks5-tunnel` pour relier l'interface TUN au proxy local.
 | VMess, Trojan, Shadowsocks | ✅ |
 | Import par lien `vless://`, `vmess://`, `trojan://`, `ss://` | ✅ |
 | Gestion de plusieurs serveurs (ajout, sélection, suppression) | ✅ |
-| DNS résolu **dans** le tunnel (module DNS de Xray) | ✅ |
-| Réseaux locaux (LAN) en direct | ✅ |
-| IPv6 (option), blocage QUIC (option) | ✅ |
+| DNS résolu **dans** le tunnel : IP, TCP ou DoH | ✅ |
+| FakeDNS, MTU, IPv6, blocage QUIC | ✅ |
+| Applications contournées (split tunneling), accès LAN | ✅ |
+| Sniffing / RouteOnly | ✅ |
+| Reconnexion auto (Wi-Fi ↔ 4G), WakeLock | ✅ |
+| Ports SOCKS5 / HTTP configurables, UDP via SOCKS5 | ✅ |
+| Tampons TCP/UDP (hev), niveau de journalisation | ✅ |
+| Test de latence par serveur (mesure du cœur) | ✅ |
+| Débits temps réel (accueil + notification) | ✅ |
+| Verrouillage de l'app par code PIN | ✅ |
+| Version TLS minimale (auto / 1.2 / 1.3) | ✅ |
 | Notification de premier plan + arrêt depuis la notification | ✅ |
 | UI Jetpack Compose Material 3, thème clair/sombre, FR + EN | ✅ |
-| Abonnements, QR code, split tunneling, stats de trafic | ❌ (pistes plus bas) |
+| Abonnements, QR code, mode root, UDPGW/DNSTT | ❌ (pistes plus bas) |
 
 ## Architecture
 
@@ -116,19 +124,72 @@ et les valeurs par défaut de `scripts/fetch-deps.sh`, puis supprimez les fichie
 4. Accepter la demande de permission VPN d'Android.
 5. La notification « Connecté à … » permet de déconnecter sans rouvrir l'app.
 
-Paramètres disponibles : DNS (adresse IP numérique ; sinon retour à `1.1.1.1`), MTU,
-IPv6, blocage QUIC.
+### Paramètres
+
+**Réseau & protocole** : DNS (IP nue, `tcp://…` ou DoH `https://…`), FakeDNS, MTU
+(1280–9000, préréglages), IPv6, blocage de QUIC (UDP 443).
+
+> Xray ne sait faire du DNS distant qu'en DoH (`https://`), `h2c://` ou TCP (`tcp://`).
+> Il n'existe pas de DoT (`tls://`) ni de DoQ distant : une valeur `tls://…` est ramenée
+> à l'IP correspondante, et un nom d'hôte non numérique retombe sur `1.1.1.1`.
+
+**Routage** : sniffing des domaines, RouteOnly, routage par application dans les
+deux sens (exclure les apps choisies du VPN, ou n'autoriser que celles choisies),
+accès au proxy SOCKS/HTTP depuis le réseau local.
+
+**Anti-censure** : fragmentation du handshake TLS + bruit aléatoire (`finalmask` du
+cœur Xray) pour rendre le trafic peu identifiable par un deep packet inspection.
+Transports TCP uniquement (tcp, ws, grpc, h2, httpupgrade, xhttp) ; en REALITY la
+fragmentation porte sur 1–3 paquets.
+
+**Moteur de décision** : « Tester les serveurs à la connexion » mesure la latence de
+tous les serveurs en parallèle (2 instances Xray temporaires au maximum) et connecte
+automatiquement le plus rapide. Pendant la recherche, réappuyer sur le bouton
+connecte directement le serveur actuel sans attendre.
+
+**Performance & stabilité** : watchdog toutes les 20 s (état du cœur **et** requête
+HTTP réelle via le proxy), reconnexion sur changement de réseau avec backoff
+exponentiel 1→30 s (8 essais), WakeLock borné et renouvelé, tampons TCP/UDP avec
+profils Stable/Rapide, `sockopt` (TFO, TCP_NODELAY, keepalive), Mux optionnel
+(WS + TLS uniquement). Le service ne redémarre plus seul si l'utilisateur avait
+arrêté le VPN.
+
+**Ports** : SOCKS5 (10808, authentifié), HTTP (10809, **désactivé par défaut** ;
+s'il est activé, authentification obligatoire), UDP via SOCKS5.
+
+**Sécurité** : code PIN au lancement (PBKDF2-HMAC-SHA256 salé, comparaison en temps
+constant), version TLS minimale, Hardware ID (clé XUDP de 32 octets) affiché et
+régénérable.
+
+**Diagnostics** : écran dédié (temps de connexion, latence, débit moyen sur 10 s,
+reconnexions de session, taille décodée de la clé XUDP), URL de test, niveau de
+journalisation, test de latence par serveur, débits en temps réel.
 
 ## Limites connues / prochaines étapes
 
 - **`minSdk 29`** : imposé par l'AAR officiel de hev-socks5-tunnel. Pour descendre à 24,
   il faut recompiler hev avec le NDK (`Android.mk`, `APP_PLATFORM=android-24`), comme le
   fait v2rayNG.
-- **IPv6 désactivé par défaut** : sans route IPv6, le trafic IPv6 des autres apps peut
-  sortir en direct. Activez l'option si votre réseau et votre serveur le supportent.
-- **Pas encore** : abonnements, QR code, split tunneling par app, test de latence,
-  statistiques de trafic (le cœur expose `queryAllOutboundTrafficStats`), mode proxy seul,
-  démarrage au boot, tuile Quick Settings.
+- **IPv6 désactivé par défaut** : la route `::/0` est posée sur le TUN et Xray bloque
+  `::/0` — aucun paquet IPv6 ne peut sortir hors tunnel, mais les applications n'ont
+  pas d'IPv6 tant que l'option est désactivée. Activez-la si votre réseau et votre
+  serveur le supportent.
+- **Bientôt (non implémenté)** : rotation automatique vers un serveur de secours,
+  changement de transport automatique (ws → grpc → …), abonnements, import par QR
+  code, mode root (proxy transparent hors API VPN), UDPGW/DNSTT, démarrage au boot,
+  tuile Quick Settings, compteur de données par application.
+- **Non prévu avec ce cœur — vrai multipath (Wi-Fi + 4G simultanés)** : pas réalisable avec l'API VpnService
+  (un seul TUN par app) ni avec un noyau Xray seul. La reconnexion automatique fait la
+  bascule entre réseaux, mais sans continuité ni agrégation.
+- **Non prévu avec ce cœur — FEC / BBR** : Xray n'expose ni FEC ni contrôle de congestion BBR côté client
+  (BBR exigerait un noyau modifié, donc root). Approximation possible côté client :
+  transports mKCP/QUIC selon ce que le serveur supporte.
+- **Non prévu avec ce cœur — compression** : Xray ne compresse pas le trafic
+  applicatif ; l'option gzip d'autres clients n'a pas d'équivalent ici.
+- **Verrouillage** : code PIN uniquement (pas de biométrie pour l'instant) ; le PIN est
+  stocké sous forme de PBKDF2 salé, jamais en clair. PIN oublié = effacement des
+  données de l'application.
+- **DoT / DoQ distant** : non supportés par le cœur Xray embarqué (voir plus haut).
 - **Signature release** : ajoutez un keystore et la configuration `signingConfigs`
   avant de distribuer.
 - **Play Store** : l'app utilise `specialUse` comme type de service de premier plan ;
