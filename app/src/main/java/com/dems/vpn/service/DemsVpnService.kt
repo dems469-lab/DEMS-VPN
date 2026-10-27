@@ -7,9 +7,12 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.Network
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
-import android.util.Base64
+import android.os.PowerManager
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -24,15 +27,17 @@ import com.dems.vpn.data.numericDns
 import hev.htproxy.TProxyService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
-import java.security.SecureRandom
 
 /**
- * Service VPN : crée l'interface TUN, démarre Xray (SOCKS local) puis
- * hev-socks5-tunnel qui relie le TUN au SOCKS.
+ * Service VPN : crée l'interface TUN, démarre Xray (proxy local) puis
+ * hev-socks5-tunnel qui relie le TUN au proxy.
  */
 class DemsVpnService : VpnService() {
 
@@ -46,10 +51,13 @@ class DemsVpnService : VpnService() {
         private const val CHANNEL_ID = "dems_vpn_status"
         private const val NOTIFICATION_ID = 1001
 
-        private const val SOCKS_PORT = 10808
         private const val CLIENT_IPV4 = "10.10.10.2"
         private const val CLIENT_IPV6 = "fd00::2"
         private const val DNS_IPV6 = "2606:4700:4700::1111"
+
+        private const val STATS_INTERVAL_MS = 2_000L
+        private const val RECONNECT_DEBOUNCE_MS = 1_500L
+        private const val RECONNECT_MIN_UPTIME_MS = 5_000L
 
         fun start(context: Context, profileId: String?) {
             val intent = Intent(context, DemsVpnService::class.java)
@@ -69,7 +77,16 @@ class DemsVpnService : VpnService() {
     private var running = false
     private var starting = false
     @Volatile private var stopRequested = false
+    @Volatile private var reconnecting = false
+    private var connectedAt = 0L
+
     private var scope: CoroutineScope? = null
+    private var statsJob: Job? = null
+    private var wakeLock: PowerManager.WakeLock? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+
+    private var currentProfileId: String? = null
+    private var currentProfileName: String = ""
 
     override fun onCreate() {
         super.onCreate()
@@ -83,7 +100,7 @@ class DemsVpnService : VpnService() {
         }
 
         // Déjà connecté (ou connexion en cours) : ne rien relancer.
-        if (running || starting) return START_STICKY
+        if (running || starting || reconnecting) return START_STICKY
 
         val profileId = intent?.getStringExtra(EXTRA_PROFILE_ID)
             ?: ProfileStore.selectedId.value
@@ -106,7 +123,9 @@ class DemsVpnService : VpnService() {
 
         starting = true
         stopRequested = false
-        VpnController.connecting(profile.name)
+        currentProfileId = profileId
+        currentProfileName = profile.name
+        VpnController.connecting(profile.name, resetSession = true)
         val jobScope = CoroutineScope(SupervisorJob() + Dispatchers.IO).also { scope = it }
         jobScope.launch {
             try {
@@ -152,9 +171,16 @@ class DemsVpnService : VpnService() {
             return
         }
 
-        val socksUser = randomToken()
-        val socksPass = randomToken()
-        val config = XrayConfigBuilder.build(profile, settings, SOCKS_PORT, socksUser, socksPass)
+        val socksUser = SettingsStore.sessionToken()
+        val socksPass = SettingsStore.sessionToken()
+        val config = XrayConfigBuilder.build(
+            profile = profile,
+            settings = settings,
+            socksPort = settings.socksPort,
+            httpPort = settings.httpPort,
+            socksUser = socksUser,
+            socksPass = socksPass
+        )
 
         val builder = Builder()
             .setSession(getString(R.string.app_name))
@@ -169,12 +195,7 @@ class DemsVpnService : VpnService() {
             builder.addDnsServer(DNS_IPV6)
         }
 
-        // Le processus de l'application (donc Xray) ne doit pas repasser dans le tunnel.
-        try {
-            builder.addDisallowedApplication(packageName)
-        } catch (e: PackageManager.NameNotFoundException) {
-            Log.w(TAG, "Impossible d'exclure le paquet du tunnel", e)
-        }
+        applySplitTunneling(builder, settings)
 
         val descriptor = try {
             builder.establish()
@@ -193,9 +214,10 @@ class DemsVpnService : VpnService() {
             return
         }
 
+        acquireWakeLock(settings)
+
         val startResult = XrayCore.start(this, config)
         if (startResult.isFailure) {
-            cleanup()
             fail("Xray : ${startResult.exceptionOrNull()?.message ?: "échec du démarrage"}")
             return
         }
@@ -206,7 +228,6 @@ class DemsVpnService : VpnService() {
         }
 
         if (!startTun2Socks(descriptor, settings, socksUser, socksPass)) {
-            cleanup()
             fail(getString(R.string.error_tun2socks))
             return
         }
@@ -217,8 +238,52 @@ class DemsVpnService : VpnService() {
         }
 
         running = true
+        connectedAt = SystemClock.elapsedRealtime()
+        currentProfileId = profileId
+        currentProfileName = profile.name
         VpnController.connected(profile.name)
         updateNotification(getString(R.string.notification_connected, profile.name))
+
+        registerNetworkCallback()
+        startStatsLoop()
+    }
+
+    /**
+     * Split tunneling dans les deux sens :
+     * - exclusion (défaut) : les apps choisies contournent le VPN ;
+     * - inclusion : seules les apps choisies passent par le VPN.
+     *
+     * Le processus de l'application (Xray) est toujours exclu, sinon son
+     * propre trafic repartirait dans l'interface TUN (boucle).
+     */
+    private fun applySplitTunneling(builder: Builder, settings: VpnSettings) {
+        val targets = settings.bypassApps.filter { it != packageName }
+
+        if (settings.splitInclude && targets.isNotEmpty()) {
+            targets.forEach { pkg ->
+                try {
+                    builder.addAllowedApplication(pkg)
+                } catch (e: PackageManager.NameNotFoundException) {
+                    Log.w(TAG, "Application autorisée introuvable : $pkg", e)
+                }
+            }
+            return
+        }
+
+        try {
+            builder.addDisallowedApplication(packageName)
+        } catch (e: PackageManager.NameNotFoundException) {
+            Log.w(TAG, "Impossible d'exclure le paquet du tunnel", e)
+        }
+        if (!settings.splitInclude) {
+            targets.forEach { pkg ->
+                try {
+                    builder.addDisallowedApplication(pkg)
+                } catch (e: PackageManager.NameNotFoundException) {
+                    Log.w(TAG, "Application contournée introuvable : $pkg", e)
+                }
+            }
+        }
     }
 
     private fun startTun2Socks(
@@ -233,13 +298,24 @@ class DemsVpnService : VpnService() {
             appendLine("  ipv4: $CLIENT_IPV4")
             if (settings.ipv6) appendLine("  ipv6: '$CLIENT_IPV6'")
             appendLine("socks5:")
-            appendLine("  port: $SOCKS_PORT")
+            appendLine("  port: ${settings.socksPort}")
             appendLine("  address: 127.0.0.1")
+            // hev n'accepte que 'udp' ou 'tcp'. Quand l'UDP est désactivé,
+            // c'est l'inbound Xray (udp=false) qui refuse les associations.
             appendLine("  udp: 'udp'")
             appendLine("  username: '${yamlEscape(user)}'")
             appendLine("  password: '${yamlEscape(pass)}'")
             appendLine("misc:")
-            appendLine("  log-level: warn")
+            appendLine("  log-level: ${
+                when (settings.logLevel) {
+                    "debug" -> "debug"
+                    "info" -> "info"
+                    else -> "warn"
+                }
+            }")
+            appendLine("  tcp-buffer-size: ${settings.tcpBufferKb * 1024}")
+            appendLine("  task-stack-size: ${settings.tcpBufferKb * 1024 + 20480}")
+            appendLine("  udp-recv-buffer-size: ${settings.udpBufferKb * 1024}")
         }
 
         return try {
@@ -254,6 +330,98 @@ class DemsVpnService : VpnService() {
         }
     }
 
+    // ------------------------------------------------------- Stats & réseau
+
+    private fun startStatsLoop() {
+        statsJob?.cancel()
+        statsJob = scope?.launch {
+            var lastUpload = 0L
+            var lastDownload = 0L
+            var uploadTotal = 0L
+            var downloadTotal = 0L
+            var lastTick = SystemClock.elapsedRealtime()
+
+            while (isActive && running) {
+                delay(STATS_INTERVAL_MS)
+                if (!running) break
+
+                val counters = XrayCore.traffic()
+                uploadTotal += counters.uplink
+                downloadTotal += counters.downlink
+
+                val now = SystemClock.elapsedRealtime()
+                val seconds = ((now - lastTick).coerceAtLeast(1L)) / 1000.0
+                val uploadRate = ((uploadTotal - lastUpload) / seconds).toLong().coerceAtLeast(0L)
+                val downloadRate = ((downloadTotal - lastDownload) / seconds).toLong().coerceAtLeast(0L)
+
+                lastUpload = uploadTotal
+                lastDownload = downloadTotal
+                lastTick = now
+
+                VpnController.traffic(uploadTotal, downloadTotal, uploadRate, downloadRate)
+                updateNotification(
+                    getString(
+                        R.string.notification_traffic,
+                        formatBytes(downloadRate),
+                        formatBytes(uploadRate)
+                    )
+                )
+            }
+        }
+    }
+
+    private fun registerNetworkCallback() {
+        if (networkCallback != null) return
+        val manager = getSystemService(ConnectivityManager::class.java) ?: return
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                // Ignore l'événement déclenché juste après l'enregistrement.
+                if (SystemClock.elapsedRealtime() - connectedAt < RECONNECT_MIN_UPTIME_MS) return
+                scheduleReconnect("réseau disponible")
+            }
+        }
+        networkCallback = callback
+        runCatching { manager.registerDefaultNetworkCallback(callback) }
+            .onFailure {
+                Log.w(TAG, "Suivi réseau indisponible", it)
+                networkCallback = null
+            }
+    }
+
+    private fun unregisterNetworkCallback() {
+        val callback = networkCallback ?: return
+        networkCallback = null
+        val manager = getSystemService(ConnectivityManager::class.java) ?: return
+        runCatching { manager.unregisterNetworkCallback(callback) }
+    }
+
+    /**
+     * Après un changement de réseau (Wi-Fi ↔ 4G), les sockets du cœur sont
+     * souvent mortes : on relance proprement tout le tunnel.
+     */
+    private fun scheduleReconnect(reason: String) {
+        if (!running || reconnecting) return
+        if (!SettingsStore.current().autoReconnect) return
+        val profileId = currentProfileId ?: return
+        reconnecting = true
+        scope?.launch {
+            try {
+                delay(RECONNECT_DEBOUNCE_MS)
+                if (!running) return@launch
+                Log.i(TAG, "Reconnexion ($reason)")
+                VpnController.reconnectAttempt()
+                VpnController.connecting(currentProfileName)
+                stopPipeline()
+                startVpn(profileId)
+            } catch (t: Throwable) {
+                Log.e(TAG, "Reconnexion impossible", t)
+                fail(t.message ?: getString(R.string.error_tun))
+            } finally {
+                reconnecting = false
+            }
+        }
+    }
+
     // ---------------------------------------------------------------- Arrêt
 
     private fun stopVpn() {
@@ -265,11 +433,20 @@ class DemsVpnService : VpnService() {
         stopSelf()
     }
 
-    private fun cleanup() {
+    /** Arrête seulement le tunnel (Xray + tun2socks + TUN), sans le service. */
+    private fun stopPipeline() {
         running = false
+        statsJob?.cancel()
+        statsJob = null
         runCatching { TProxyService.TProxyStopService() }
         XrayCore.stop()
         closeTun()
+    }
+
+    private fun cleanup() {
+        stopPipeline()
+        unregisterNetworkCallback()
+        releaseWakeLock()
     }
 
     private fun closeTun() {
@@ -288,6 +465,28 @@ class DemsVpnService : VpnService() {
 
     private fun stopForegroundCompat() {
         stopForeground(STOP_FOREGROUND_REMOVE)
+    }
+
+    // ---------------------------------------------------------- Veille/repos
+
+    private fun acquireWakeLock(settings: VpnSettings) {
+        if (!settings.wakeLock) return
+        val manager = getSystemService(PowerManager::class.java) ?: return
+        val lock = wakeLock ?: manager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "dems:vpn"
+        ).apply { setReferenceCounted(false) }
+        wakeLock = lock
+        if (!lock.isHeld) {
+            runCatching { lock.acquire() }
+                .onFailure { Log.w(TAG, "WakeLock refusé", it) }
+        }
+    }
+
+    private fun releaseWakeLock() {
+        val lock = wakeLock ?: return
+        wakeLock = null
+        if (lock.isHeld) runCatching { lock.release() }
     }
 
     // -------------------------------------------------------- Notifications
@@ -325,6 +524,7 @@ class DemsVpnService : VpnService() {
             .setSmallIcon(R.drawable.ic_stat_dems)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(text)
+            .setSubText(currentProfileName.takeIf { it.isNotBlank() })
             .setContentIntent(openIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -342,11 +542,21 @@ class DemsVpnService : VpnService() {
 
     // ---------------------------------------------------------------- Outils
 
-    private fun randomToken(): String {
-        val bytes = ByteArray(12)
-        SecureRandom().nextBytes(bytes)
-        return Base64.encodeToString(bytes, Base64.NO_WRAP or Base64.URL_SAFE or Base64.NO_PADDING)
-    }
-
     private fun yamlEscape(value: String): String = value.replace("'", "''")
+
+    private fun formatBytes(bytesPerSecond: Long): String {
+        val value = bytesPerSecond.coerceAtLeast(0L).toDouble()
+        val units = arrayOf("o", "Ko", "Mo", "Go")
+        var index = 0
+        var scaled = value
+        while (scaled >= 1024 && index < units.lastIndex) {
+            scaled /= 1024
+            index++
+        }
+        return if (index == 0) {
+            "${scaled.toInt()} ${units[index]}/s"
+        } else {
+            "%.1f %s/s".format(scaled, units[index])
+        }
+    }
 }

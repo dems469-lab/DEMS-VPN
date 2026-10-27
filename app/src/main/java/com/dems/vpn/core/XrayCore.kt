@@ -88,4 +88,32 @@ object XrayCore {
     }
 
     fun isRunning(): Boolean = synchronized(lock) { controller?.isRunning == true }
+
+    /** Latence HTTP (ms) mesurée par le cœur avec une config de test. -1 si échec. */
+    fun measureDelay(configJson: String, url: String): Long =
+        runCatching { Libv2ray.measureOutboundDelay(configJson, url) }.getOrDefault(-1L)
+
+    data class TrafficCounters(val uplink: Long = 0L, val downlink: Long = 0L)
+
+    /**
+     * Compteurs cumulés depuis le dernier appel (les compteurs Xray sont remis
+     * à zéro par `queryAllOutboundTrafficStats`).
+     */
+    fun traffic(): TrafficCounters = synchronized(lock) {
+        val raw = runCatching { controller?.queryAllOutboundTrafficStats() }
+            .getOrNull()
+            .orEmpty()
+        var up = 0L
+        var down = 0L
+        raw.split(';').forEach { entry ->
+            val parts = entry.split(',')
+            if (parts.size != 3) return@forEach
+            val value = parts[2].toLongOrNull() ?: return@forEach
+            when (parts[1]) {
+                "uplink" -> up += value
+                "downlink" -> down += value
+            }
+        }
+        TrafficCounters(up, down)
+    }
 }
