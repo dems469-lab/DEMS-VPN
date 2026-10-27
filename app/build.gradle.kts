@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.net.URI
 
 plugins {
     alias(libs.plugins.android.application)
@@ -26,7 +27,7 @@ val fetchDeps = tasks.register("fetchDeps") {
             target.parentFile?.mkdirs()
             println("Téléchargement de ${target.name}…")
             val temp = File(target.parentFile, target.name + ".part")
-            java.net.URI(url).toURL().openStream().use { input ->
+            URI(url).toURL().openStream().use { input ->
                 temp.outputStream().use { output -> input.copyTo(output) }
             }
             if (!temp.renameTo(target)) {
