@@ -61,6 +61,8 @@ fun HomeScreen(
     status: VpnStatus,
     server: Profile?,
     coreVersion: String,
+    latency: Long?,
+    searching: Boolean,
     onToggle: () -> Unit,
     onOpenServers: () -> Unit,
     onOpenSettings: () -> Unit
@@ -88,9 +90,9 @@ fun HomeScreen(
         Spacer(Modifier.height(8.dp))
         BrandHeader(onOpenSettings)
         Spacer(Modifier.height(22.dp))
-        ConnectCard(status, server, elapsed, connected, onToggle)
+        ConnectCard(status, server, elapsed, connected, searching, onToggle)
         Spacer(Modifier.height(16.dp))
-        ServerCard(server, onOpenServers)
+        ServerCard(server, latency, onOpenServers)
         if (server == null) {
             Spacer(Modifier.height(12.dp))
             Button(onClick = onOpenServers, modifier = Modifier.fillMaxWidth()) {
@@ -150,6 +152,7 @@ private fun ConnectCard(
     server: Profile?,
     elapsed: Long,
     connected: Boolean,
+    searching: Boolean,
     onToggle: () -> Unit
 ) {
     val busy = status.state == VpnState.CONNECTING || status.state == VpnState.STOPPING
@@ -242,13 +245,32 @@ private fun ConnectCard(
             Text(
                 text = when {
                     connected -> formatDuration(elapsed)
-                    status.state == VpnState.CONNECTING -> stringResource(R.string.status_connecting)
+                    searching -> stringResource(R.string.auto_bench_searching)
+                    status.state == VpnState.CONNECTING ->
+                        if (status.reconnects > 0) stringResource(R.string.status_reconnecting)
+                        else stringResource(R.string.status_connecting)
                     status.state == VpnState.STOPPING -> stringResource(R.string.status_stopping)
                     else -> stringResource(R.string.hint_tap_connect)
                 },
                 color = Color.White.copy(alpha = 0.78f),
                 style = MaterialTheme.typography.bodySmall
             )
+
+            if (connected) {
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                    TrafficValue(
+                        label = stringResource(R.string.label_download),
+                        rate = formatRate(status.downloadRate),
+                        total = formatBytes(status.downloadTotal)
+                    )
+                    TrafficValue(
+                        label = stringResource(R.string.label_upload),
+                        rate = formatRate(status.uploadRate),
+                        total = formatBytes(status.uploadTotal)
+                    )
+                }
+            }
 
             if (status.state == VpnState.ERROR && !status.message.isNullOrBlank()) {
                 Spacer(Modifier.height(10.dp))
@@ -264,7 +286,7 @@ private fun ConnectCard(
 }
 
 @Composable
-private fun ServerCard(server: Profile?, onOpenServers: () -> Unit) {
+private fun ServerCard(server: Profile?, latency: Long?, onOpenServers: () -> Unit) {
     Card(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -305,8 +327,18 @@ private fun ServerCard(server: Profile?, onOpenServers: () -> Unit) {
                     overflow = TextOverflow.Ellipsis
                 )
                 if (server != null) {
+                    // -2L = test en cours (sentinelle MainViewModel.LATENCY_RUNNING)
+                    val latencyLabel = if (latency == null) {
+                        server.endpoint
+                    } else if (latency == -2L) {
+                        server.endpoint + " · " + stringResource(R.string.latency_testing)
+                    } else if (latency < 0) {
+                        server.endpoint + " · " + stringResource(R.string.latency_failed)
+                    } else {
+                        server.endpoint + " · " + stringResource(R.string.latency_ms, latency)
+                    }
                     Text(
-                        text = server.endpoint,
+                        text = latencyLabel,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -367,3 +399,42 @@ private fun formatDuration(seconds: Long): String {
         "%02d:%02d".format(minutes, secs)
     }
 }
+
+@Composable
+private fun TrafficValue(label: String, rate: String, total: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = label,
+            color = Color.White.copy(alpha = 0.65f),
+            style = MaterialTheme.typography.labelSmall
+        )
+        Text(
+            text = rate,
+            color = Color.White,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            text = total,
+            color = Color.White.copy(alpha = 0.6f),
+            style = MaterialTheme.typography.labelSmall
+        )
+    }
+}
+
+private fun formatBytes(bytes: Long): String {
+    val units = arrayOf("o", "Ko", "Mo", "Go", "To")
+    var value = bytes.coerceAtLeast(0L).toDouble()
+    var index = 0
+    while (value >= 1024 && index < units.lastIndex) {
+        value /= 1024
+        index++
+    }
+    return if (index == 0) {
+        "${value.toInt()} ${units[index]}"
+    } else {
+        "%.1f %s".format(value, units[index])
+    }
+}
+
+private fun formatRate(bytesPerSecond: Long): String = "${formatBytes(bytesPerSecond)}/s"

@@ -3,20 +3,25 @@ package com.dems.vpn.core
 import com.dems.vpn.data.Profile
 import com.dems.vpn.data.Protocol
 import com.dems.vpn.data.VpnSettings
-import com.dems.vpn.data.numericDns
+import com.dems.vpn.data.TCP_BASED_NETWORKS
+import com.dems.vpn.data.listenAddress
+import com.dems.vpn.data.xrayDns
 import org.json.JSONArray
 import org.json.JSONObject
 
 /**
  * Construit la configuration Xray complète :
  *
- *   [apps] ──► interface TUN ──► tun2socks ──► SOCKS 127.0.0.1:10808 ──► Xray ──► serveur
+ *   [apps] ──► interface TUN ──► tun2socks ──► SOCKS/HTTP 127.0.0.1 ──► Xray ──► serveur
  *
  * - `tun2socks` (hev) lit les paquets de l'interface VPN et les transforme en SOCKS5.
- * - Xray écoute sur la boucle locale, renifle les domaines et applique le routage.
+ * - Xray écoute sur la boucle locale (ou sur le LAN si le partage est activé),
+ *   renifle les domaines et applique le routage.
  * - Les requêtes DNS passent par le module DNS de Xray (donc dans le tunnel).
  */
 object XrayConfigBuilder {
+
+    private const val DNS_IPV6 = "2606:4700:4700::1111"
 
     private val PRIVATE_IPS = listOf(
         "10.0.0.0/8",
@@ -34,25 +39,62 @@ object XrayConfigBuilder {
         profile: Profile,
         settings: VpnSettings,
         socksPort: Int,
+        httpPort: Int,
         socksUser: String,
         socksPass: String
     ): String {
         val root = JSONObject()
 
-        root.put("log", JSONObject().put("loglevel", "warning"))
+        root.put("log", JSONObject().put("loglevel", settings.logLevel))
 
-        val dnsServers = JSONArray().put(settings.numericDns())
-        if (settings.ipv6) dnsServers.put("2606:4700:4700::1111")
+        // Compteurs de trafic : sans le bloc `stats`, le gestionnaire de
+        // statistiques du cœur n'existe pas et `queryAllOutboundTrafficStats`
+        // ne renvoie rien (voire fait échouer l'assertion côté Go).
+        root.put("stats", JSONObject())
+        root.put(
+            "policy",
+            JSONObject().put(
+                "system",
+                JSONObject()
+                    .put("statsOutboundUplink", true)
+                    .put("statsOutboundDownlink", true)
+            )
+        )
+
+        val dnsServers = JSONArray()
+        if (settings.fakeDns) dnsServers.put("fakedns")
+        dnsServers.put(settings.xrayDns())
+        if (settings.ipv6 && !settings.dnsIsRemote) dnsServers.put(DNS_IPV6)
+
         root.put(
             "dns",
             JSONObject()
                 .put("servers", dnsServers)
                 .put("queryStrategy", "UseIP")
+                // Cache DNS activé explicitement : les résolutions répétées ne
+                // repartent pas dans le tunnel à chaque requête.
+                .put("disableCache", false)
         )
 
-        val inbound = JSONObject()
+        // FakeDNS : renvoie des IP fictives (198.18.0.0/15) pour les domaines,
+        // ce qui évite une résolution lente avant le tunnel.
+        if (settings.fakeDns) {
+            root.put(
+                "fakedns",
+                JSONArray().put(
+                    JSONObject()
+                        .put("ipPool", "198.18.0.0/15")
+                        .put("poolSize", 10000)
+                )
+            )
+        }
+
+        val listen = settings.listenAddress()
+        val sniffing = buildSniffing(settings)
+
+        val socks = JSONObject()
             .put("tag", "socks-in")
-            .put("listen", "127.0.0.1")
+            .put("listen", listen)
             .put("port", socksPort)
             .put("protocol", "socks")
             .put(
@@ -65,19 +107,39 @@ object XrayConfigBuilder {
                             JSONObject().put("user", socksUser).put("pass", socksPass)
                         )
                     )
-                    .put("udp", true)
+                    .put("udp", settings.socksUdp)
             )
-            .put(
-                "sniffing",
-                JSONObject()
-                    .put("enabled", true)
-                    .put("destOverride", JSONArray().put("http").put("tls").put("quic"))
-                    .put("routeOnly", false)
-            )
-        root.put("inbounds", JSONArray().put(inbound))
+            .put("sniffing", sniffing)
+
+        val inbounds = JSONArray().put(socks)
+
+        // HTTP local désactivé par défaut : hev passe uniquement par SOCKS.
+        // S'il est activé (usage LAN), authentification obligatoire.
+        if (settings.httpProxyEnabled) {
+            val http = JSONObject()
+                .put("tag", "http-in")
+                .put("listen", listen)
+                .put("port", httpPort)
+                .put("protocol", "http")
+                .put(
+                    "settings",
+                    JSONObject()
+                        .put("timeout", 300)
+                        .put(
+                            "accounts",
+                            JSONArray().put(
+                                JSONObject().put("user", socksUser).put("pass", socksPass)
+                            )
+                        )
+                )
+                .put("sniffing", buildSniffing(settings))
+            inbounds.put(http)
+        }
+
+        root.put("inbounds", inbounds)
 
         val outbounds = JSONArray()
-        outbounds.put(buildOutbound(profile))
+        outbounds.put(buildOutbound(profile, settings))
         outbounds.put(JSONObject().put("tag", "direct").put("protocol", "freedom"))
         outbounds.put(JSONObject().put("tag", "dns-out").put("protocol", "dns"))
         outbounds.put(JSONObject().put("tag", "block").put("protocol", "blackhole"))
@@ -87,7 +149,7 @@ object XrayConfigBuilder {
         // DNS de l'interface VPN -> module DNS de Xray (résolution dans le tunnel).
         rules.put(
             fieldRule()
-                .put("inboundTag", JSONArray().put("socks-in"))
+                .put("inboundTag", JSONArray().put("socks-in").put("http-in"))
                 .put("port", "53")
                 .put("outboundTag", "dns-out")
         )
@@ -102,6 +164,15 @@ object XrayConfigBuilder {
         }
         // Réseaux locaux en direct (imprimantes, NAS, box…).
         rules.put(fieldRule().put("ip", JSONArray(PRIVATE_IPS)).put("outboundTag", "direct"))
+        // IPv6 désactivé : tout ce qui n'est pas un réseau local v6 est bloqué,
+        // y compris si une application contourne le DNS de l'interface.
+        if (!settings.ipv6) {
+            rules.put(
+                fieldRule()
+                    .put("ip", JSONArray().put("::/0"))
+                    .put("outboundTag", "block")
+            )
+        }
         // Tout le reste dans le tunnel.
         rules.put(fieldRule().put("network", "tcp,udp").put("outboundTag", "proxy"))
 
@@ -115,9 +186,22 @@ object XrayConfigBuilder {
         return root.toString(2)
     }
 
+    private fun buildSniffing(settings: VpnSettings): JSONObject {
+        val enabled = settings.sniffing || settings.fakeDns
+        val destOverride = JSONArray()
+        if (enabled) {
+            destOverride.put("http").put("tls").put("quic")
+            if (settings.fakeDns) destOverride.put("fakedns")
+        }
+        return JSONObject()
+            .put("enabled", enabled)
+            .put("destOverride", destOverride)
+            .put("routeOnly", settings.routeOnly)
+    }
+
     private fun fieldRule(): JSONObject = JSONObject().put("type", "field")
 
-    private fun buildOutbound(profile: Profile): JSONObject {
+    private fun buildOutbound(profile: Profile, settings: VpnSettings): JSONObject {
         val outbound = JSONObject()
         when (profile.protocol) {
             Protocol.VLESS -> {
@@ -198,17 +282,84 @@ object XrayConfigBuilder {
 
         outbound.put("tag", "proxy")
         if (profile.protocol != Protocol.SHADOWSOCKS) {
-            outbound.put("streamSettings", buildStreamSettings(profile))
+            outbound.put("streamSettings", buildStreamSettings(profile, settings))
+        }
+
+        // Mux : uniquement WS + TLS, jamais REALITY ni Vision (flux XTLS),
+        // où le multiplexage casse le transport ou dégrade le débit.
+        val muxSafe = profile.network.equals("ws", ignoreCase = true) &&
+            profile.securityLayer.equals("tls", ignoreCase = true) &&
+            profile.flow.isBlank()
+        if (settings.mux && muxSafe) {
+            outbound.put(
+                "mux",
+                JSONObject().put("enabled", true).put("concurrency", 8)
+            )
         }
         return outbound
     }
 
-    private fun buildStreamSettings(profile: Profile): JSONObject {
+    /**
+     * Anti-censure : fragmentation du handshake TLS et bruit aléatoire sur
+     * l'UDP (`finalmask` du cœur Xray). Rend le trafic peu identifiable par un
+     * deep packet inspection.
+     */
+    private fun applyFinalMask(stream: JSONObject, network: String, security: String, settings: VpnSettings) {
+        if (!settings.finalMask) return
+        if (network !in TCP_BASED_NETWORKS) return
+
+        // REALITY n'est pas un handshake TLS classique : le fragment doit porter sur 1-3 paquets.
+        val packets = if (security.equals("reality", ignoreCase = true)) "1-3" else "tlshello"
+
+        val tcpMask = JSONObject()
+            .put("type", "fragment")
+            .put(
+                "settings",
+                JSONObject()
+                    .put("packets", packets)
+                    .put("length", "50-100")
+                    .put("delay", "10-20")
+                    .put("maxSplit", "10")
+            )
+
+        val udpMask = JSONObject()
+            .put("type", "noise")
+            .put(
+                "settings",
+                JSONObject().put(
+                    "noise",
+                    JSONArray().put(
+                        JSONObject()
+                            .put("rand", "10-20")
+                            .put("delay", "10-16")
+                    )
+                )
+            )
+
+        stream.put(
+            "finalmask",
+            JSONObject()
+                .put("tcp", JSONArray().put(tcpMask))
+                .put("udp", JSONArray().put(udpMask))
+        )
+    }
+
+    private fun buildStreamSettings(profile: Profile, settings: VpnSettings): JSONObject {
         val stream = JSONObject()
         val network = profile.network.ifBlank { "tcp" }
         val security = profile.securityLayer.ifBlank { "none" }
         stream.put("network", network)
         stream.put("security", security)
+        stream.put(
+            "sockopt",
+            JSONObject()
+                .put("tcpFastOpen", true)
+                .put("tcpNoDelay", true)
+                .put("tcpKeepAliveInterval", 30)
+                .put("tcpKeepAliveIdle", 60)
+        )
+
+        applyFinalMask(stream, network, security, settings)
 
         when (security) {
             "tls" -> stream.put(
@@ -223,6 +374,7 @@ object XrayConfigBuilder {
                     put("allowInsecure", profile.allowInsecure)
                     if (profile.alpn.isNotEmpty()) put("alpn", JSONArray(profile.alpn))
                     if (profile.fingerprint.isNotBlank()) put("fingerprint", profile.fingerprint)
+                    if (settings.tlsMinVersion != "auto") put("minVersion", settings.tlsMinVersion)
                 }
             )
 

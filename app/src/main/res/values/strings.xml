@@ -1,5 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Diagnostic de session -->
+    <string name="diag_title">Diagnostic</string>
+    <string name="diag_session">Session</string>
+    <string name="diag_state">État</string>
+    <string name="diag_server">Serveur</string>
+    <string name="diag_uptime">Temps de connexion</string>
+    <string name="diag_reconnects">Reconnexions (session)</string>
+    <string name="diag_core">Cœur Xray</string>
+    <string name="diag_app">Application</string>
+    <string name="diag_measures">Mesures</string>
+    <string name="diag_latency">Latence</string>
+    <string name="diag_latency_test">Mesurer</string>
+    <string name="diag_speed">Débit (moyenne 10 s)</string>
+    <string name="diag_speed_hint">Aucune mesure pour l\'instant</string>
+    <string name="diag_speed_running">Mesure en cours…</string>
+    <string name="diag_speed_result">↓ %1$s · ↑ %2$s (%3$d s)</string>
+    <string name="diag_speed_test">Tester 10 s</string>
+    <string name="diag_key">Clé XUDP</string>
+    <string name="diag_key_size">Taille décodée</string>
+    <string name="diag_key_ok">%1$d octets — correct</string>
+    <string name="diag_key_bad">%1$d octets (32 attendus)</string>
+    <string name="diag_empty">—</string>
+    <string name="diag_not_measured">Non mesurée</string>
+    <string name="diag_privacy">Aucun contenu, domaine ou identifiant de serveur n\'est journalisé par cet écran.</string>
+    <string name="settings_open_diagnostic">Ouvrir le diagnostic</string>
+    <string name="settings_open_diagnostic_desc">Temps de connexion, latence, débit 10 s, reconnexions</string>
+
     <string name="app_name">DEMS VPN</string>
     <string name="tagline">Xray · TUN</string>
 
@@ -7,17 +34,23 @@
     <string name="status_connecting">Connexion…</string>
     <string name="status_stopping">Déconnexion…</string>
     <string name="status_disconnected">Déconnecté</string>
+    <string name="status_reconnecting">Reconnexion…</string>
+    <string name="error_reconnect_failed">Reconnexion impossible après 8 tentatives</string>
+    <string name="battery_title">Éviter les coupures</string>
+    <string name="battery_body">Pour que le VPN reste actif écran éteint, autorise DEMS VPN à ignorer l\'optimisation de batterie d\'Android. Sans cela, le système peut couper le tunnel en arrière-plan.</string>
+    <string name="battery_allow">Autoriser</string>
+    <string name="battery_later">Plus tard</string>
     <string name="status_error">Erreur</string>
 
     <string name="hint_tap_connect">Appuyez pour vous connecter</string>
-    <string name="hint_tap_disconnect">Appuyez pour vous déconnecter</string>
     <string name="label_server">Serveur</string>
     <string name="label_mode">Mode</string>
     <string name="mode_value">TUN · Xray</string>
     <string name="no_server">Aucun serveur</string>
-    <string name="no_server_hint">Ajoutez un serveur pour démarrer</string>
     <string name="add_server">Ajouter un serveur</string>
     <string name="core_label">Cœur</string>
+    <string name="label_download">Reçu</string>
+    <string name="label_upload">Envoyé</string>
 
     <string name="servers_title">Serveurs</string>
     <string name="servers_empty">Aucun serveur pour le moment.\nAjoutez un lien vless://, vmess://, trojan:// ou ss://.</string>
@@ -38,16 +71,104 @@
     <string name="error_tun2socks">tun2socks n\'a pas démarré</string>
     <string name="error_profile">Serveur introuvable</string>
 
+    <string name="test_latency">Tester la latence</string>
+    <string name="latency_testing">Test…</string>
+    <string name="auto_bench_searching">Recherche du meilleur serveur…</string>
+    <string name="latency_failed">Échec</string>
+    <string name="latency_ms">%1$d ms</string>
+
     <string name="settings_title">Paramètres</string>
-    <string name="settings_network">Réseau</string>
+    <string name="settings_network">Réseau &amp; protocole</string>
     <string name="settings_dns">DNS</string>
     <string name="settings_dns_hint">1.1.1.1</string>
+    <string name="settings_dns_help">IP (1.1.1.1), TCP (tcp://1.1.1.1) ou DoH (https://…). DoT (tls://) et DoQ ne sont pas supportés par le cœur Xray : une valeur tls:// est ramenée à l\'IP.</string>
+    <string name="settings_dns_presets">Résolveurs rapides</string>
+    <string name="settings_fake_dns">FakeDNS</string>
+    <string name="settings_fake_dns_desc">Réponses DNS instantanées dans le tunnel ; peut casser certaines applications</string>
     <string name="settings_mtu">MTU</string>
     <string name="settings_mtu_hint">1500</string>
+    <string name="settings_mtu_desc">1500 par défaut ; baissez à 1400 ou 1300 si les pages ne chargent pas</string>
     <string name="settings_ipv6">IPv6</string>
     <string name="settings_ipv6_desc">Router aussi le trafic IPv6 dans le tunnel</string>
     <string name="settings_quic">Bloquer QUIC (UDP 443)</string>
     <string name="settings_quic_desc">Force HTTP/3 à repasser en TCP</string>
+
+    <string name="settings_routing">Routage &amp; tunnel</string>
+    <string name="settings_sniffing">Sniffing des domaines</string>
+    <string name="settings_sniffing_desc">Détecte le nom de domaine réel de la destination</string>
+    <string name="settings_route_only">RouteOnly</string>
+    <string name="settings_route_only_desc">Le domaine sert au routage uniquement, pas à la résolution DNS</string>
+    <string name="settings_split_direction">Sens du routage par application</string>
+    <string name="settings_split_exclude">Exclure les apps choisies</string>
+    <string name="settings_split_include">Uniquement les apps choisies</string>
+    <string name="settings_bypass_title_exclude">Applications contournées (hors VPN)</string>
+    <string name="settings_bypass_title_include">Applications autorisées (dans le VPN)</string>
+    <string name="settings_bypass_desc">Sélectionnez les applications concernées par le mode ci-dessus</string>
+    <string name="settings_bypass_none">Aucune sélectionnée</string>
+    <string name="settings_bypass_count">%1$d application(s) sélectionnée(s)</string>
+    <string name="settings_choose_apps">Choisir</string>
+    <string name="settings_lan">Accès depuis le réseau local</string>
+    <string name="settings_lan_desc">Expose le proxy HTTP sur le Wi-Fi pour un PC ou un autre appareil</string>
+    <string name="settings_lan_warning">Attention : le proxy local devient accessible aux autres appareils du réseau.</string>
+
+    <string name="settings_stealth">Anti-censure</string>
+    <string name="settings_final_mask">Fragmentation + padding</string>
+    <string name="settings_final_mask_desc">Fragments le handshake TLS et ajoute du bruit aléatoire pour rendre le trafic non identifiable (transports TCP uniquement)</string>
+    <string name="settings_engine">Moteur de décision</string>
+    <string name="settings_auto_bench">Tester les serveurs à la connexion</string>
+    <string name="settings_auto_bench_desc">Mesure tous les serveurs et connecte automatiquement le plus rapide — réappuyer sur le bouton pour annuler et garder le serveur actuel</string>
+    <string name="settings_speed">Vitesse</string>
+    <string name="settings_mux">Mux (multiplexage)</string>
+    <string name="settings_mux_desc">Concurrency 8, appliqué uniquement aux serveurs WS + TLS (jamais REALITY ni Vision)</string>
+    <string name="settings_buffer_preset">Profil de tampons</string>
+    <string name="settings_buffer_preset_desc">Stable : 32 Ko TCP / 256 Ko UDP · Rapide : 128 Ko TCP / 1024 Ko UDP. Ajustable plus bas.</string>
+    <string name="settings_buffer_stable">Stable</string>
+    <string name="settings_buffer_fast">Rapide</string>
+    <string name="settings_stability">Performance &amp; stabilité</string>
+    <string name="settings_reconnect">Reconnexion automatique</string>
+    <string name="settings_reconnect_desc">Relance le tunnel après un changement Wi-Fi ↔ 4G</string>
+    <string name="settings_wakelock">Maintenir actif écran éteint</string>
+    <string name="settings_wakelock_desc">Empêche Android de suspendre le tunnel en arrière-plan</string>
+    <string name="settings_tcp_buffer">Tampon TCP (Ko)</string>
+    <string name="settings_udp_buffer">Tampon UDP (Ko)</string>
+    <string name="settings_buffer_note">Valeurs transmises à hev (tun2socks). La compression gzip n\'existe pas dans Xray : le trafic est déjà chiffré par le protocole.</string>
+
+    <string name="settings_ports">Ports &amp; proxies locaux</string>
+    <string name="settings_socks_port">Port SOCKS5</string>
+    <string name="settings_http_port">Port HTTP</string>
+    <string name="settings_socks_udp">UDP via SOCKS5</string>
+    <string name="settings_socks_udp_desc">Nécessaire aux jeux, appels vocaux et à la résolution DNS ; à laisser activé en général</string>
+    <string name="settings_http_proxy">Proxy HTTP local</string>
+    <string name="settings_http_proxy_desc">Désactivé par défaut (hev utilise SOCKS). Si activé, authentification obligatoire avec les identifiants de session.</string>
+    <string name="settings_ports_note">À ne modifier qu\'en cas de conflit de port. Une reconnexion est nécessaire. En accès LAN, SOCKS et HTTP exigent une authentification.</string>
+
+    <string name="settings_security">Sécurité &amp; confidentialité</string>
+    <string name="settings_app_lock">Verrouillage de l\'application</string>
+    <string name="settings_app_lock_desc">Code PIN demandé à l\'ouverture</string>
+    <string name="settings_app_lock_enabled">Activé</string>
+    <string name="settings_app_lock_disabled">Désactivé</string>
+    <string name="settings_pin_set">Définir</string>
+    <string name="settings_pin_remove">Supprimer</string>
+    <string name="settings_pin_title">Code d\'accès</string>
+    <string name="settings_pin_new">Nouveau code (4 à 8 chiffres)</string>
+    <string name="settings_pin_confirm">Confirmer le code</string>
+    <string name="settings_pin_error">Codes différents ou invalides (4 à 8 chiffres)</string>
+    <string name="settings_pin_saved">Code enregistré</string>
+    <string name="settings_pin_removed">Verrouillage désactivé</string>
+    <string name="settings_tls">Version TLS</string>
+    <string name="settings_tls_desc">Auto recommandé ; 1.3 force le TLS moderne</string>
+    <string name="settings_device_id">Hardware ID (clé XUDP)</string>
+    <string name="settings_device_id_desc">Identifiant envoyé au cœur ; certains fournisseurs l\'utilisent pour lier l\'abonnement</string>
+    <string name="settings_regenerate">Régénérer</string>
+    <string name="settings_regenerate_title">Régénérer l\'identifiant ?</string>
+    <string name="settings_regenerate_desc">La nouvelle clé sera utilisée au prochain démarrage de l\'application.</string>
+
+    <string name="settings_diagnostics">Diagnostics</string>
+    <string name="settings_test_url">URL de test de latence</string>
+    <string name="settings_test_url_hint">https://www.gstatic.com/generate_204</string>
+    <string name="settings_log_level">Niveau de journalisation</string>
+    <string name="settings_log_hint">debug pour voir précisément où la connexion bloque</string>
+
     <string name="settings_about">À propos</string>
     <string name="settings_version">Version</string>
     <string name="settings_core">Cœur Xray</string>
@@ -55,8 +176,20 @@
     <string name="settings_license_value">GPL-3.0 · basé sur v2rayNG / Xray-core</string>
     <string name="settings_note">Base de client VPN. Le cœur Xray tourne en local et le trafic passe par un tunnel TUN (tun2socks).</string>
 
+    <string name="apps_title">Applications contournées</string>
+    <string name="apps_search">Rechercher une application</string>
+    <string name="apps_empty">Aucune application trouvée</string>
+    <string name="apps_apply">Appliquer</string>
+    <string name="apps_clear">Tout désélectionner</string>
+
+    <string name="lock_title">DEMS VPN est verrouillé</string>
+    <string name="lock_hint">Code d\'accès</string>
+    <string name="lock_unlock">Déverrouiller</string>
+    <string name="lock_error">Code incorrect</string>
+
     <string name="notification_channel">État de la connexion</string>
     <string name="notification_connecting">Connexion en cours…</string>
     <string name="notification_connected">Connecté à %1$s</string>
     <string name="notification_disconnect">Déconnecter</string>
+    <string name="notification_traffic">↓ %1$s · ↑ %2$s</string>
 </resources>
