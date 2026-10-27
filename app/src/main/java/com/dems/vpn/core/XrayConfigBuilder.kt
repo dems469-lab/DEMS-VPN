@@ -71,6 +71,9 @@ object XrayConfigBuilder {
             JSONObject()
                 .put("servers", dnsServers)
                 .put("queryStrategy", "UseIP")
+                // Cache DNS activé explicitement : les résolutions répétées ne
+                // repartent pas dans le tunnel à chaque requête.
+                .put("disableCache", false)
         )
 
         // FakeDNS : renvoie des IP fictives (198.18.0.0/15) pour les domaines,
@@ -264,6 +267,18 @@ object XrayConfigBuilder {
         if (profile.protocol != Protocol.SHADOWSOCKS) {
             outbound.put("streamSettings", buildStreamSettings(profile, settings))
         }
+
+        // Mux : uniquement WS + TLS, jamais REALITY ni Vision (flux XTLS),
+        // où le multiplexage casse le transport ou dégrade le débit.
+        val muxSafe = profile.network.equals("ws", ignoreCase = true) &&
+            profile.securityLayer.equals("tls", ignoreCase = true) &&
+            profile.flow.isBlank()
+        if (settings.mux && muxSafe) {
+            outbound.put(
+                "mux",
+                JSONObject().put("enabled", true).put("concurrency", 8)
+            )
+        }
         return outbound
     }
 
@@ -318,6 +333,14 @@ object XrayConfigBuilder {
         val security = profile.securityLayer.ifBlank { "none" }
         stream.put("network", network)
         stream.put("security", security)
+        stream.put(
+            "sockopt",
+            JSONObject()
+                .put("tcpFastOpen", true)
+                .put("tcpNoDelay", true)
+                .put("tcpKeepAliveInterval", 30)
+                .put("tcpKeepAliveIdle", 60)
+        )
 
         applyFinalMask(stream, network, security, settings)
 

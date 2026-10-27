@@ -279,6 +279,52 @@ fun SettingsScreen(
                 )
             }
 
+            // ---------------------------------------------- Vitesse
+            SectionTitle(stringResource(R.string.settings_speed))
+            SettingsCard {
+                SwitchRow(
+                    title = stringResource(R.string.settings_mux),
+                    description = stringResource(R.string.settings_mux_desc),
+                    checked = settings.mux,
+                    onCheckedChange = { onChange(settings.copy(mux = it)) }
+                )
+                HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = dividerColor())
+                Column(Modifier.padding(16.dp)) {
+                    Text(
+                        text = stringResource(R.string.settings_buffer_preset),
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    val stableSelected = settings.tcpBufferKb == 32 && settings.udpBufferKb == 256
+                    val fastSelected = settings.tcpBufferKb == 128 && settings.udpBufferKb == 1024
+                    val currentPreset = when {
+                        stableSelected -> "stable"
+                        fastSelected -> "fast"
+                        else -> "custom"
+                    }
+                    val stableLabel = stringResource(R.string.settings_buffer_stable)
+                    val fastLabel = stringResource(R.string.settings_buffer_fast)
+                    ChipRow(
+                        options = listOf("stable", "fast"),
+                        selected = currentPreset,
+                        label = { mode -> if (mode == "stable") stableLabel else fastLabel },
+                        onSelect = { mode ->
+                            if (mode == "stable") {
+                                onChange(settings.copy(tcpBufferKb = 32, udpBufferKb = 256))
+                            } else {
+                                onChange(settings.copy(tcpBufferKb = 128, udpBufferKb = 1024))
+                            }
+                        }
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(R.string.settings_buffer_preset_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
             // ------------------------------------------- Stabilité
             SectionTitle(stringResource(R.string.settings_stability))
             SettingsCard {

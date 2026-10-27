@@ -84,7 +84,7 @@
     <string name="settings_network">Réseau &amp; protocole</string>
     <string name="settings_dns">DNS</string>
     <string name="settings_dns_hint">1.1.1.1</string>
-    <string name="settings_dns_help">IP (1.1.1.1), TCP (tcp://1.1.1.1) ou DoH (https://…)</string>
+    <string name="settings_dns_help">IP (1.1.1.1), TCP (tcp://1.1.1.1) ou DoH (https://…). DoT (tls://) et DoQ ne sont pas supportés par le cœur Xray : une valeur tls:// est ramenée à l\'IP.</string>
     <string name="settings_dns_presets">Résolveurs rapides</string>
     <string name="settings_fake_dns">FakeDNS</string>
     <string name="settings_fake_dns_desc">Réponses DNS instantanées dans le tunnel ; peut casser certaines applications</string>
@@ -121,6 +121,13 @@
     <string name="settings_engine">Moteur de décision</string>
     <string name="settings_auto_bench">Tester les serveurs à la connexion</string>
     <string name="settings_auto_bench_desc">Mesure tous les serveurs et connecte automatiquement le plus rapide — réappuyer sur le bouton pour annuler et garder le serveur actuel</string>
+    <string name="settings_speed">Vitesse</string>
+    <string name="settings_mux">Mux (multiplexage)</string>
+    <string name="settings_mux_desc">Concurrency 8, appliqué uniquement aux serveurs WS + TLS (jamais REALITY ni Vision)</string>
+    <string name="settings_buffer_preset">Profil de tampons</string>
+    <string name="settings_buffer_preset_desc">Stable : 32 Ko TCP / 256 Ko UDP · Rapide : 128 Ko TCP / 1024 Ko UDP. Ajustable plus bas.</string>
+    <string name="settings_buffer_stable">Stable</string>
+    <string name="settings_buffer_fast">Rapide</string>
     <string name="settings_stability">Performance &amp; stabilité</string>
     <string name="settings_reconnect">Reconnexion automatique</string>
     <string name="settings_reconnect_desc">Relance le tunnel après un changement Wi-Fi ↔ 4G</string>

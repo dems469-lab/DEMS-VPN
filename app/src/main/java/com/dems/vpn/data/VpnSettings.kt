@@ -38,6 +38,10 @@ data class VpnSettings(
     val tlsMinVersion: String = "auto",
     val appLockPin: String = "",
 
+    // --- Performance ---
+    /** Mux Xray (concurrency 8), réservé à WS+TLS sans Vision. */
+    val mux: Boolean = false,
+
     // --- Diagnostic ---
     val testUrl: String = "https://www.gstatic.com/generate_204",
 

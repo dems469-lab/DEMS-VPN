@@ -42,6 +42,7 @@ object SettingsStore {
             logLevel = prefs.getString("log_level", "warning") ?: "warning",
             tlsMinVersion = prefs.getString("tls_min", "auto") ?: "auto",
             appLockPin = prefs.getString("app_lock_pin", "") ?: "",
+            mux = prefs.getBoolean("mux", false),
             testUrl = prefs.getString("test_url", "https://www.gstatic.com/generate_204")
                 ?: "https://www.gstatic.com/generate_204",
             autoBench = prefs.getBoolean("auto_bench", false)
@@ -90,6 +91,7 @@ object SettingsStore {
             .putString("log_level", sanitized.logLevel)
             .putString("tls_min", sanitized.tlsMinVersion)
             .putString("app_lock_pin", sanitized.appLockPin)
+            .putBoolean("mux", sanitized.mux)
             .putString("test_url", sanitized.testUrl)
             .putBoolean("auto_bench", sanitized.autoBench)
             .apply()
