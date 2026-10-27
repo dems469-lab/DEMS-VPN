@@ -146,6 +146,11 @@ fun DiagnosticScreen(
                 )
                 Divider()
                 InfoRow(
+                    stringResource(R.string.diag_tun_path),
+                    tunPathLabel(tunnel.tunPathVerified)
+                )
+                Divider()
+                InfoRow(
                     stringResource(R.string.diag_bytes_proxy),
                     formatBytes(tunnel.proxyBytesDown) + " ↓ / " +
                         formatBytes(tunnel.proxyBytesUp) + " ↑"
@@ -241,6 +246,13 @@ private fun boolLabel(value: Boolean?): String = when (value) {
 
 @Composable
 private fun optBoolLabel(value: Boolean?): String = boolLabel(value)
+
+@Composable
+private fun tunPathLabel(value: Boolean?): String = when (value) {
+    null -> stringResource(R.string.diag_unknown)
+    true -> stringResource(R.string.diag_tun_path_verified)
+    false -> stringResource(R.string.diag_tun_path_unverified)
+}
 
 @Composable
 private fun portLabel(value: Boolean?): String = when (value) {

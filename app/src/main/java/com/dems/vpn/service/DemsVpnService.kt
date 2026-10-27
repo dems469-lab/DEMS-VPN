@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
 import android.os.PowerManager
@@ -105,6 +106,12 @@ class DemsVpnService : VpnService() {
     private var activeSocksPort: Int = 10808
     private var wakeLock: PowerManager.WakeLock? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
+
+    // Compteurs de l'interface TUN : seule preuve observable que le trafic
+    // applicatif transite par le périphérique (la sonde SOCKS passe par la
+    // boucle locale et ne traverse jamais le TUN).
+    private var tunIface: String? = null
+    private var tunBytesTotal = 0L
 
     private var currentProfileId: String? = null
     private var currentProfileName: String = ""
@@ -272,12 +279,15 @@ class DemsVpnService : VpnService() {
         running = true
         currentProfileId = profileId
         currentProfileName = profile.name
+        tunBytesTotal = 0L
         TunnelDiagnostics.update {
             copy(
                 coreRunning = XrayCore.isRunning(),
                 hevRunning = true,
                 probe = TunnelDiagnostics.Probe.UNKNOWN,
-                probeAt = 0L
+                probeAt = 0L,
+                tunPathVerified = false,
+                tunBytes = 0L
             )
         }
 
@@ -467,8 +477,11 @@ class DemsVpnService : VpnService() {
         val manager = getSystemService(ConnectivityManager::class.java) ?: return
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
+                val capabilities = manager.getNetworkCapabilities(network)
+                // Le réseau VPN lui-même n'est jamais un sous-jacent.
+                if (capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true) return
                 bindUnderlying(network)
-                reportUnderlying(manager.getNetworkCapabilities(network))
+                reportUnderlying(capabilities)
                 // Ignore l'événement déclenché juste après l'enregistrement.
                 if (SystemClock.elapsedRealtime() - connectedAt < RECONNECT_MIN_UPTIME_MS) return
                 scheduleReconnect("réseau disponible")
@@ -483,7 +496,10 @@ class DemsVpnService : VpnService() {
                 network: Network,
                 capabilities: NetworkCapabilities
             ) {
+                if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) return
                 reportUnderlying(capabilities)
+                // Garde de 5 s identique aux autres événements.
+                if (SystemClock.elapsedRealtime() - connectedAt < RECONNECT_MIN_UPTIME_MS) return
                 if (!capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
                     scheduleReconnect("réseau sans Internet")
                 } else {
@@ -492,11 +508,41 @@ class DemsVpnService : VpnService() {
             }
         }
         networkCallback = callback
-        runCatching { manager.registerDefaultNetworkCallback(callback) }
+        // Demande explicite : réseaux non-VPN avec Internet. Le réseau VPN ne
+        // doit ni atteindre setUnderlyingNetworks (sous-jacent = physiques)
+        // ni déclencher une reconnexion autour ; repli possible sur le
+        // callback "défaut" dont les gestionnaires filtrent déjà le VPN.
+        val request = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+            .build()
+        runCatching { manager.registerNetworkCallback(request, callback) }
+            .recoverCatching { manager.registerDefaultNetworkCallback(callback) }
             .onFailure {
                 Log.w(TAG, "Suivi réseau indisponible", it)
                 networkCallback = null
             }
+    }
+
+    /**
+     * Somme des octets (rx+tx) de l'interface TUN, via /sys (lisible par une
+     * application ? selon SELinux : renvoie null si inaccessible, le diagnostic
+     * affichera alors "jamais observé" plutôt qu'une invention).
+     */
+    private fun readTunBytes(): Long? {
+        if (tunIface == null) {
+            tunIface = File("/sys/class/net").list()?.firstOrNull { it.startsWith("tun") }
+            if (tunIface == null) {
+                Log.d(TAG, "Interface TUN absente de /sys/class/net")
+                return null
+            }
+        }
+        fun stat(name: String): Long? =
+            runCatching { File("/sys/class/net/$tunIface/statistics/$name").readText().trim().toLong() }
+                .getOrNull()
+        val rx = stat("rx_bytes") ?: return null
+        val tx = stat("tx_bytes") ?: return null
+        return rx + tx
     }
 
     /** Diagnostic : nom du réseau sous-jacent observé (aucune supposition). */
@@ -611,6 +657,20 @@ class DemsVpnService : VpnService() {
                 } else {
                     TunnelDiagnostics.update { copy(coreRunning = false) }
                 }
+                // Preuve du chemin TUN : le compteur ne bouge que s'il existe
+                // du trafic applicatif capté par le TUN. La sonde 204, lui, ne
+                // le traverse jamais (boucle locale).
+                readTunBytes()?.let { total ->
+                    val grew = total > tunBytesTotal
+                    if (grew) tunBytesTotal = total
+                    TunnelDiagnostics.update {
+                        copy(
+                            tunBytes = total,
+                            tunPathVerified = if (tunPathVerified == true) true else grew
+                        )
+                    }
+                }
+
                 val healthy = outcome?.phase == TunnelDiagnostics.Probe.OK
                 if (healthy) {
                     watchdogFailures = 0
@@ -797,6 +857,7 @@ class DemsVpnService : VpnService() {
         runCatching { TProxyService.TProxyStopService() }
         XrayCore.stop()
         closeTun()
+        tunBytesTotal = 0L
         TunnelDiagnostics.update {
             copy(
                 coreRunning = false,
@@ -805,7 +866,9 @@ class DemsVpnService : VpnService() {
                 probe = TunnelDiagnostics.Probe.UNKNOWN,
                 probeAt = 0L,
                 proxyBytesUp = 0L,
-                proxyBytesDown = 0L
+                proxyBytesDown = 0L,
+                tunPathVerified = null,
+                tunBytes = 0L
             )
         }
     }

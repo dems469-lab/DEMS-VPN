@@ -27,7 +27,10 @@
     <string name="diag_core_running">Xray core running</string>
     <string name="diag_hev_running">tun2socks (hev) started</string>
     <string name="diag_socks_port">Local SOCKS port</string>
-    <string name="diag_probe">Tunnel test (SOCKS + DNS + HTTP 204)</string>
+    <string name="diag_probe">Xray → server (probe via local SOCKS, no TUN)</string>
+    <string name="diag_tun_path">TUN → tun2socks path</string>
+    <string name="diag_tun_path_unverified">not verified (no app traffic observed)</string>
+    <string name="diag_tun_path_verified">verified (traffic captured by TUN)</string>
     <string name="diag_bytes_proxy">Proxy outbound bytes</string>
     <string name="diag_underlying">Underlying network</string>
     <string name="diag_yes">yes</string>
@@ -40,7 +43,7 @@
     <string name="diag_probe_auth">SOCKS handshake</string>
     <string name="diag_probe_relay">relay (DNS or server)</string>
     <string name="diag_probe_http">HTTP response</string>
-    <string name="diag_probe_ok">full tunnel OK</string>
+    <string name="diag_probe_ok">server response OK (204)</string>
     <string name="diag_privacy">No content, domain or server identifier is logged by this screen.</string>
     <string name="settings_open_diagnostic">Open diagnostics</string>
     <string name="settings_open_diagnostic_desc">Connection time, latency, 10 s throughput, reconnects</string>

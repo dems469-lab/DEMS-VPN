@@ -34,7 +34,16 @@ object TunnelDiagnostics {
         /** Horodatage (epoch ms) de la dernière sonde, 0 si aucune. */
         val probeAt: Long = 0L,
         /** Réseau sous-jacent observé (Wi-Fi, Cellulaire…). */
-        val underlying: String = ""
+        val underlying: String = "",
+        /**
+         * Chemin TUN → tun2socks prouvé uniquement par une croissance des
+         * compteurs d'octets de l'interface TUN (trafic applicatif réel).
+         * La sonde SOCKS traverse la boucle locale et CE TUN pas : `null`
+         * signifie « jamais observé ».
+         */
+        val tunPathVerified: Boolean? = null,
+        /** Octets cumulés (rx+tx) lus sur l'interface TUN, 0 si inconnu. */
+        val tunBytes: Long = 0L
     )
 
     private val _state = MutableStateFlow(Snapshot())

@@ -27,7 +27,10 @@
     <string name="diag_core_running">Cœur Xray actif</string>
     <string name="diag_hev_running">tun2socks (hev) démarré</string>
     <string name="diag_socks_port">Port SOCKS local</string>
-    <string name="diag_probe">Test du tunnel (SOCKS + DNS + HTTP 204)</string>
+    <string name="diag_probe">Xray → serveur (sonde via SOCKS local, hors TUN)</string>
+    <string name="diag_tun_path">Chemin TUN → tun2socks</string>
+    <string name="diag_tun_path_unverified">non vérifié (aucun trafic applicatif observé)</string>
+    <string name="diag_tun_path_verified">vérifié (trafic capté par le TUN)</string>
     <string name="diag_bytes_proxy">Octets de l\'outbound proxy</string>
     <string name="diag_underlying">Réseau sous-jacent</string>
     <string name="diag_yes">oui</string>
@@ -40,7 +43,7 @@
     <string name="diag_probe_auth">négociation SOCKS</string>
     <string name="diag_probe_relay">relais (DNS ou serveur)</string>
     <string name="diag_probe_http">réponse HTTP</string>
-    <string name="diag_probe_ok">tunnel complet OK</string>
+    <string name="diag_probe_ok">réponse du serveur OK (204)</string>
     <string name="diag_privacy">Aucun contenu, domaine ou identifiant de serveur n\'est journalisé par cet écran.</string>
     <string name="settings_open_diagnostic">Ouvrir le diagnostic</string>
     <string name="settings_open_diagnostic_desc">Temps de connexion, latence, débit 10 s, reconnexions</string>
