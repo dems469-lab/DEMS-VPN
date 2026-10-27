@@ -51,6 +51,14 @@
     <string name="app_name">DEMS VPN</string>
     <string name="tagline">Xray · TUN</string>
 
+    <string name="stats_down">Débit</string>
+    <string name="stats_up">Upload</string>
+    <string name="stats_ping">Ping</string>
+    <string name="stats_unit_kbps">Ko/s</string>
+    <string name="stats_unit_mbps">Mbps</string>
+    <string name="stats_unit_ms">ms</string>
+    <string name="stats_empty">—</string>
+    <string name="chart_label">Débit réel (outbound proxy)</string>
     <string name="nav_home">Accueil</string>
     <string name="nav_servers">Serveur</string>
     <string name="nav_journal">Journal</string>

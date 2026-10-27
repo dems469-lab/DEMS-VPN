@@ -31,6 +31,8 @@ object TunnelDiagnostics {
         val proxyBytesDown: Long = 0L,
         /** Résultat de la dernière sonde. */
         val probe: Probe = Probe.UNKNOWN,
+        /** Durée mesurée (ms) de la dernière sonde OK, 0 si non applicable. */
+        val probeMs: Long = 0L,
         /** Horodatage (epoch ms) de la dernière sonde, 0 si aucune. */
         val probeAt: Long = 0L,
         /** Réseau sous-jacent observé (Wi-Fi, Cellulaire…). */

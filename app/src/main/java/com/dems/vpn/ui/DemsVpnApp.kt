@@ -109,6 +109,7 @@ fun DemsVpnApp(
     val searching by viewModel.searching.collectAsStateWithLifecycle()
     val speedSample by viewModel.speedSample.collectAsStateWithLifecycle()
     val speedTesting by viewModel.speedTesting.collectAsStateWithLifecycle()
+    val rateHistory by viewModel.rateHistory.collectAsStateWithLifecycle()
     val deviceKey by viewModel.deviceKey.collectAsStateWithLifecycle()
     val tunnelDiag by TunnelDiagnostics.state.collectAsStateWithLifecycle()
 
@@ -278,6 +279,8 @@ fun DemsVpnApp(
                     coreVersion = viewModel.coreVersion(),
                     latency = selected?.let { latencies[it.id] },
                     searching = searching,
+                    rateHistory = rateHistory,
+                    tunnelDiag = tunnelDiag,
                     onToggle = {
                         when (status.state) {
                             VpnState.CONNECTED,

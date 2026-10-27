@@ -651,6 +651,7 @@ class DemsVpnService : VpnService() {
                             coreRunning = true,
                             socksPortOpen = outcome.portOpen,
                             probe = outcome.phase,
+                            probeMs = outcome.ms,
                             probeAt = System.currentTimeMillis()
                         )
                     }
@@ -712,6 +713,7 @@ class DemsVpnService : VpnService() {
                     coreRunning = XrayCore.isRunning(),
                     socksPortOpen = outcome.portOpen,
                     probe = outcome.phase,
+                    probeMs = outcome.ms,
                     probeAt = System.currentTimeMillis()
                 )
             }
@@ -735,7 +737,9 @@ class DemsVpnService : VpnService() {
 
     private data class ProbeOutcome(
         val portOpen: Boolean,
-        val phase: TunnelDiagnostics.Probe
+        val phase: TunnelDiagnostics.Probe,
+        /** Durée de la sonde complète (ms), 0 si le 204 n'a pas abouti. */
+        val ms: Long = 0L
     )
 
     /**
@@ -744,6 +748,7 @@ class DemsVpnService : VpnService() {
      * fonctionne. Renvoie la phase la plus avancée atteinte (204 attendu).
      */
     private fun probeTunnel(): ProbeOutcome = try {
+        val startedAt = SystemClock.elapsedRealtime()
         Socket().use { socket ->
             socket.connect(InetSocketAddress("127.0.0.1", activeSocksPort), PROBE_TIMEOUT_MS)
             socket.soTimeout = PROBE_TIMEOUT_MS
@@ -813,7 +818,11 @@ class DemsVpnService : VpnService() {
             val status = input.bufferedReader().readLine()
                 ?: return@use ProbeOutcome(true, TunnelDiagnostics.Probe.HTTP)
             if (status.startsWith("HTTP/1.") || status.startsWith("HTTP/2")) {
-                ProbeOutcome(true, TunnelDiagnostics.Probe.OK)
+                ProbeOutcome(
+                    true,
+                    TunnelDiagnostics.Probe.OK,
+                    SystemClock.elapsedRealtime() - startedAt
+                )
             } else {
                 ProbeOutcome(true, TunnelDiagnostics.Probe.HTTP)
             }
@@ -865,6 +874,7 @@ class DemsVpnService : VpnService() {
                 socksPortOpen = null,
                 probe = TunnelDiagnostics.Probe.UNKNOWN,
                 probeAt = 0L,
+                probeMs = 0L,
                 proxyBytesUp = 0L,
                 proxyBytesDown = 0L,
                 tunPathVerified = null,

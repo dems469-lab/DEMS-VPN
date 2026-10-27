@@ -13,6 +13,7 @@ import com.dems.vpn.data.ProfileStore
 import com.dems.vpn.data.SettingsStore
 import com.dems.vpn.data.VpnSettings
 import com.dems.vpn.service.VpnController
+import com.dems.vpn.service.VpnState
 import com.dems.vpn.service.VpnStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,6 +41,9 @@ data class SpeedSample(
     val seconds: Int = 10
 )
 
+/** Mesure de débit réelle (octets/s de l'outbound proxy) pour le graphique. */
+data class RatePoint(val downBps: Long, val upBps: Long)
+
 /** Valeur spéciale affichée pendant un test de latence. */
 private const val LATENCY_RUNNING = -2L
 
@@ -65,6 +69,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val searching: StateFlow<Boolean> = _searching
 
     private var benchmarkJob: Job? = null
+
+    /**
+     * Historique du débit : uniquement des mesures réelles de l'outbound
+     * proxy (2 s par échantillon, 60 points au plus, mémoire seule). Tout
+     * arrêt de session vide l'historique : jamais de courbe inventée.
+     */
+    private val _rateHistory = MutableStateFlow<List<RatePoint>>(emptyList())
+    val rateHistory: StateFlow<List<RatePoint>> = _rateHistory
+
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            status.collect { st ->
+                if (st.state != VpnState.CONNECTED) {
+                    _rateHistory.value = emptyList()
+                } else {
+                    _rateHistory.value = (_rateHistory.value + RatePoint(st.downloadRate, st.uploadRate))
+                        .takeLast(60)
+                }
+            }
+        }
+    }
 
     private val _speedSample = MutableStateFlow<SpeedSample?>(null)
     val speedSample: StateFlow<SpeedSample?> = _speedSample

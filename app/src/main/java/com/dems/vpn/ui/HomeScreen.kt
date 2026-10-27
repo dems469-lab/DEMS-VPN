@@ -1,7 +1,14 @@
 package com.dems.vpn.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,7 +26,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowDownward
+import androidx.compose.material.icons.automirrored.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
@@ -50,9 +60,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.dems.vpn.R
 import com.dems.vpn.data.Profile
+import com.dems.vpn.service.TunnelDiagnostics
 import com.dems.vpn.service.VpnState
 import com.dems.vpn.service.VpnStatus
 import com.dems.vpn.ui.theme.BrandCyan
+import com.dems.vpn.ui.theme.NightOutline
 import com.dems.vpn.ui.theme.BrandIndigo
 import com.dems.vpn.ui.theme.BrandMint
 import com.dems.vpn.ui.theme.BrandViolet
@@ -65,6 +77,8 @@ fun HomeScreen(
     coreVersion: String,
     latency: Long?,
     searching: Boolean,
+    rateHistory: List<RatePoint>,
+    tunnelDiag: TunnelDiagnostics.Snapshot,
     onToggle: () -> Unit,
     onOpenServers: () -> Unit
 ) {
@@ -96,7 +110,9 @@ fun HomeScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
         ) {
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(4.dp))
+            StatsCard(status, tunnelDiag, rateHistory)
+            Spacer(Modifier.height(16.dp))
             ConnectCard(status, server, elapsed, connected, searching, onToggle)
             Spacer(Modifier.height(16.dp))
             ServerCard(server, latency, onOpenServers)
@@ -163,6 +179,234 @@ private fun DottedWorldMap(modifier: Modifier) {
                 }
             }
         }
+    }
+}
+
+/**
+ * Carte de statistiques : uniquement des données réelles.
+ * Déconnecté ou sans mesure -> affichage "—", aucune valeur factice.
+ */
+@Composable
+private fun StatsCard(
+    status: VpnStatus,
+    tunnel: TunnelDiagnostics.Snapshot,
+    history: List<RatePoint>
+) {
+    val connected = status.state == VpnState.CONNECTED
+    GlowingCard {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(122.dp)
+                .padding(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(122.dp)
+                    .fillMaxHeight(),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                StatRow(
+                    icon = {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowDownward,
+                            contentDescription = null,
+                            tint = BrandCyan
+                        )
+                    },
+                    label = stringResource(R.string.stats_down),
+                    value = formatSpeed(connected, status.downloadRate)
+                )
+                StatRow(
+                    icon = {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowUpward,
+                            contentDescription = null,
+                            tint = BrandMint
+                        )
+                    },
+                    label = stringResource(R.string.stats_up),
+                    value = formatSpeed(connected, status.uploadRate)
+                )
+                StatRow(
+                    icon = {
+                        Icon(
+                            Icons.Filled.Refresh,
+                            contentDescription = null,
+                            tint = BrandCyan
+                        )
+                    },
+                    label = stringResource(R.string.stats_ping),
+                    value = if (connected && tunnel.probeMs > 0)
+                        "%d ".format(tunnel.probeMs) + stringResource(R.string.stats_unit_ms)
+                    else
+                        stringResource(R.string.stats_empty)
+                )
+            }
+
+            Box(
+                Modifier
+                    .padding(horizontal = 12.dp)
+                    .width(1.dp)
+                    .fillMaxHeight()
+                    .background(NightOutline)
+            )
+
+            ChartPanel(connected, history, Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun StatRow(
+    icon: @Composable () -> Unit,
+    label: String,
+    value: String
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(50))
+                .background(BrandCyan.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center
+        ) {
+            icon()
+        }
+        Spacer(Modifier.width(10.dp))
+        Column {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
+/** Échelle ronde suivante (Mbps) pour le pic mesuré. */
+private fun niceMaxMbps(bps: Long): Double {
+    val mbps = bps * 8 / 1_000_000.0
+    val steps = listOf(0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 30.0, 50.0, 100.0, 200.0, 500.0)
+    return steps.firstOrNull { it >= mbps } ?: 500.0
+}
+
+@Composable
+private fun formatSpeed(connected: Boolean, bytesPerSec: Long): String {
+    if (!connected) return stringResource(R.string.stats_empty)
+    if (bytesPerSec <= 0) return "0 " + stringResource(R.string.stats_unit_kbps)
+    val mbps = bytesPerSec * 8 / 1_000_000.0
+    return if (mbps >= 1) "%.1f ".format(mbps) + stringResource(R.string.stats_unit_mbps)
+    else "%.0f ".format(bytesPerSec / 1024.0) + stringResource(R.string.stats_unit_kbps)
+}
+
+/** Graphique du débit réel. Sans donnée : axe seul, aucune courbe inventée. */
+@Composable
+private fun ChartPanel(
+    connected: Boolean,
+    history: List<RatePoint>,
+    modifier: Modifier
+) {
+    Column(modifier) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        ) {
+            val maxBps = history.maxOfOrNull { it.downBps } ?: 0L
+            val scaleMbps = niceMaxMbps(maxBps)
+            Column(
+                verticalArrangement = Arrangement.SpaceBetween,
+                horizontalAlignment = Alignment.End,
+                modifier = Modifier
+                    .padding(end = 6.dp)
+                    .fillMaxHeight()
+            ) {
+                val labels = if (connected && history.isNotEmpty()) {
+                    (3 downTo 0).map { i ->
+                        val v = scaleMbps * i / 3.0
+                        when {
+                            v <= 0.0 -> "0"
+                            v < 1.0 -> "%.1f".format(v)
+                            else -> "%d".format(v.toInt())
+                        }
+                    }
+                } else {
+                    listOf("", "", "", "")
+                }
+                labels.forEach { label ->
+                    Text(
+                        text = label.ifEmpty { stringResource(R.string.stats_empty) },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Canvas(
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+            ) {
+                repeat(4) { i ->
+                    val y = size.height * i / 3f
+                    drawLine(
+                        color = NightOutline.copy(alpha = 0.55f),
+                        start = Offset(0f, y),
+                        end = Offset(size.width, y),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                }
+                if (history.isEmpty()) return@Canvas
+
+                val points = history.takeLast(60)
+                val peak = points.maxOf { it.downBps }.coerceAtLeast(1L)
+                val top = peak * 1.15
+                val stepX = if (points.size > 1) size.width / (points.size - 1) else size.width
+
+                fun xFor(index: Int): Float =
+                    if (points.size == 1) size.width / 2f else index * stepX
+
+                fun yFor(bps: Long): Float =
+                    (size.height * (1.0 - (bps.toDouble() / top).coerceIn(0.0, 1.0))).toFloat()
+
+                val curve = Path()
+                points.forEachIndexed { i, point ->
+                    val x = xFor(i)
+                    val y = yFor(point.downBps)
+                    if (i == 0) curve.moveTo(x, y) else curve.lineTo(x, y)
+                }
+
+                drawPath(
+                    path = Path().apply {
+                        addPath(curve)
+                        lineTo(xFor(points.lastIndex), size.height)
+                        lineTo(xFor(0), size.height)
+                        close()
+                    },
+                    brush = Brush.verticalGradient(
+                        colors = listOf(BrandCyan.copy(alpha = 0.40f), Color.Transparent),
+                        endY = size.height
+                    )
+                )
+                drawPath(
+                    path = curve,
+                    color = BrandCyan,
+                    style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+                )
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = stringResource(R.string.chart_label),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
