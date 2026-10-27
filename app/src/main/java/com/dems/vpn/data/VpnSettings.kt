@@ -32,6 +32,8 @@ data class VpnSettings(
     val socksPort: Int = 10808,
     val httpPort: Int = 10809,
     val socksUdp: Boolean = true,
+    /** Proxy HTTP local : désactivé par défaut (hev n'utilise que SOCKS). */
+    val httpProxyEnabled: Boolean = false,
 
     // --- Sécurité ---
     val logLevel: String = "warning",

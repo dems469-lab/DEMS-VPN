@@ -412,6 +412,13 @@ fun SettingsScreen(
                 }
                 HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = dividerColor())
                 SwitchRow(
+                    title = stringResource(R.string.settings_http_proxy),
+                    description = stringResource(R.string.settings_http_proxy_desc),
+                    checked = settings.httpProxyEnabled,
+                    onCheckedChange = { onChange(settings.copy(httpProxyEnabled = it)) }
+                )
+                HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = dividerColor())
+                SwitchRow(
                     title = stringResource(R.string.settings_socks_udp),
                     description = stringResource(R.string.settings_socks_udp_desc),
                     checked = settings.socksUdp,

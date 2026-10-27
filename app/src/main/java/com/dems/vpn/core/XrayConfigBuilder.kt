@@ -111,15 +111,32 @@ object XrayConfigBuilder {
             )
             .put("sniffing", sniffing)
 
-        val http = JSONObject()
-            .put("tag", "http-in")
-            .put("listen", listen)
-            .put("port", httpPort)
-            .put("protocol", "http")
-            .put("settings", JSONObject().put("timeout", 300))
-            .put("sniffing", buildSniffing(settings))
+        val inbounds = JSONArray().put(socks)
 
-        root.put("inbounds", JSONArray().put(socks).put(http))
+        // HTTP local désactivé par défaut : hev passe uniquement par SOCKS.
+        // S'il est activé (usage LAN), authentification obligatoire.
+        if (settings.httpProxyEnabled) {
+            val http = JSONObject()
+                .put("tag", "http-in")
+                .put("listen", listen)
+                .put("port", httpPort)
+                .put("protocol", "http")
+                .put(
+                    "settings",
+                    JSONObject()
+                        .put("timeout", 300)
+                        .put(
+                            "accounts",
+                            JSONArray().put(
+                                JSONObject().put("user", socksUser).put("pass", socksPass)
+                            )
+                        )
+                )
+                .put("sniffing", buildSniffing(settings))
+            inbounds.put(http)
+        }
+
+        root.put("inbounds", inbounds)
 
         val outbounds = JSONArray()
         outbounds.put(buildOutbound(profile, settings))

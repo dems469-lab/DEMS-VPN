@@ -142,7 +142,9 @@
     <string name="settings_http_port">HTTP port</string>
     <string name="settings_socks_udp">UDP over SOCKS5</string>
     <string name="settings_socks_udp_desc">Required for games, voice calls and DNS resolution; normally keep it on</string>
-    <string name="settings_ports_note">Only change on a port conflict. A reconnect is required.</string>
+    <string name="settings_http_proxy">Local HTTP proxy</string>
+    <string name="settings_http_proxy_desc">Disabled by default (hev uses SOCKS). When enabled, authentication is mandatory with the session credentials.</string>
+    <string name="settings_ports_note">Only change on a port conflict. A reconnect is required. For LAN access, SOCKS and HTTP require authentication.</string>
 
     <string name="settings_security">Security &amp; privacy</string>
     <string name="settings_app_lock">App lock</string>

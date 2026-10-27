@@ -142,7 +142,9 @@
     <string name="settings_http_port">Port HTTP</string>
     <string name="settings_socks_udp">UDP via SOCKS5</string>
     <string name="settings_socks_udp_desc">Nécessaire aux jeux, appels vocaux et à la résolution DNS ; à laisser activé en général</string>
-    <string name="settings_ports_note">À ne modifier qu\'en cas de conflit de port. Une reconnexion est nécessaire.</string>
+    <string name="settings_http_proxy">Proxy HTTP local</string>
+    <string name="settings_http_proxy_desc">Désactivé par défaut (hev utilise SOCKS). Si activé, authentification obligatoire avec les identifiants de session.</string>
+    <string name="settings_ports_note">À ne modifier qu\'en cas de conflit de port. Une reconnexion est nécessaire. En accès LAN, SOCKS et HTTP exigent une authentification.</string>
 
     <string name="settings_security">Sécurité &amp; confidentialité</string>
     <string name="settings_app_lock">Verrouillage de l\'application</string>
