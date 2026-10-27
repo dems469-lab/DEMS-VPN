@@ -1,5 +1,6 @@
 package com.dems.vpn.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +37,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -64,8 +66,7 @@ fun HomeScreen(
     latency: Long?,
     searching: Boolean,
     onToggle: () -> Unit,
-    onOpenServers: () -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenServers: () -> Unit
 ) {
     val connected = status.state == VpnState.CONNECTED
     var elapsed by remember { mutableStateOf(0L) }
@@ -81,67 +82,86 @@ fun HomeScreen(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp)
-    ) {
-        Spacer(Modifier.height(8.dp))
-        BrandHeader(onOpenSettings)
-        Spacer(Modifier.height(22.dp))
-        ConnectCard(status, server, elapsed, connected, searching, onToggle)
-        Spacer(Modifier.height(16.dp))
-        ServerCard(server, latency, onOpenServers)
-        if (server == null) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Décor : carte du monde en points, une seule passe Canvas (vectoriel),
+        // opacité très faible : aucun coût de re-composition.
+        DottedWorldMap(
+            Modifier
+                .matchParentSize()
+                .padding(horizontal = 18.dp, vertical = 30.dp)
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+        ) {
             Spacer(Modifier.height(12.dp))
-            Button(onClick = onOpenServers, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.add_server))
+            ConnectCard(status, server, elapsed, connected, searching, onToggle)
+            Spacer(Modifier.height(16.dp))
+            ServerCard(server, latency, onOpenServers)
+            if (server == null) {
+                Spacer(Modifier.height(12.dp))
+                Button(onClick = onOpenServers, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.add_server))
+                }
             }
+            Spacer(Modifier.height(12.dp))
+            InfoCard(coreVersion)
+            Spacer(Modifier.height(24.dp))
         }
-        Spacer(Modifier.height(12.dp))
-        InfoCard(coreVersion)
-        Spacer(Modifier.height(24.dp))
     }
 }
 
+/** Trame grossière des continents (« # » = point) pour le décor d'accueil. */
+private val WORLD_MAP_ROWS = listOf(
+    "................................................",
+    "....#............................................",
+    "...###.............####...######...........#....",
+    "..######..#.....#######..#########.........###...",
+    ".##########.....#######..###########......#####..",
+    "..############....#####...############..#######..",
+    "...############...######...############..######..",
+    "....############............############..####...",
+    ".....############.#.........############...##....",
+    "......###########..........##############........",
+    ".......##########...........#############........",
+    "........#########...........############..###....",
+    ".........########...........############.#####...",
+    "..........#######...........#####...####.######..",
+    "...........#####............###.....##..#######..",
+    "............#####..........###.......#..######...",
+    ".............####...........#...........#####....",
+    ".............#####........................####..",
+    "..............####..........................##..",
+    "..............######.........................##..",
+    "..............#######............#...........#..",
+    "...............######.........................",
+)
+
+/** Carte du monde en points : dessin vectoriel léger, une seule passe. */
 @Composable
-private fun BrandHeader(onOpenSettings: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(46.dp)
-                .clip(RoundedCornerShape(15.dp))
-                .background(Brush.linearGradient(listOf(BrandIndigo, BrandViolet, BrandCyan))),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_stat_dems),
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(24.dp)
-            )
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = stringResource(R.string.app_name),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = stringResource(R.string.tagline),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        IconButton(onClick = onOpenSettings) {
-            Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.settings_title))
+private fun DottedWorldMap(modifier: Modifier) {
+    val rows = WORLD_MAP_ROWS
+    Canvas(modifier) {
+        val cols = 48
+        val cell = size.width / cols
+        val radius = cell * 0.22f
+        val dot = BrandCyan.copy(alpha = 0.10f)
+        val offsetY = ((size.height - rows.size * cell) / 2f).coerceAtLeast(0f)
+        rows.forEachIndexed { y, rowText ->
+            val count = rowText.length.coerceAtMost(cols)
+            for (x in 0 until count) {
+                if (rowText[x] == '#') {
+                    drawCircle(
+                        color = dot,
+                        radius = radius,
+                        center = Offset(x * cell + cell / 2f, offsetY + y * cell + cell / 2f)
+                    )
+                }
+            }
         }
     }
 }
