@@ -43,17 +43,14 @@
     <string name="status_error">Erreur</string>
 
     <string name="hint_tap_connect">Appuyez pour vous connecter</string>
-    <string name="hint_tap_disconnect">Appuyez pour vous déconnecter</string>
     <string name="label_server">Serveur</string>
     <string name="label_mode">Mode</string>
     <string name="mode_value">TUN · Xray</string>
     <string name="no_server">Aucun serveur</string>
-    <string name="no_server_hint">Ajoutez un serveur pour démarrer</string>
     <string name="add_server">Ajouter un serveur</string>
     <string name="core_label">Cœur</string>
     <string name="label_download">Reçu</string>
     <string name="label_upload">Envoyé</string>
-    <string name="label_traffic">Débit</string>
 
     <string name="servers_title">Serveurs</string>
     <string name="servers_empty">Aucun serveur pour le moment.\nAjoutez un lien vless://, vmess://, trojan:// ou ss://.</string>
@@ -106,7 +103,6 @@
     <string name="settings_split_include">Uniquement les apps choisies</string>
     <string name="settings_bypass_title_exclude">Applications contournées (hors VPN)</string>
     <string name="settings_bypass_title_include">Applications autorisées (dans le VPN)</string>
-    <string name="settings_bypass">Applications contournées</string>
     <string name="settings_bypass_desc">Sélectionnez les applications concernées par le mode ci-dessus</string>
     <string name="settings_bypass_none">Aucune sélectionnée</string>
     <string name="settings_bypass_count">%1$d application(s) sélectionnée(s)</string>
@@ -152,7 +148,6 @@
     <string name="settings_app_lock_enabled">Activé</string>
     <string name="settings_app_lock_disabled">Désactivé</string>
     <string name="settings_pin_set">Définir</string>
-    <string name="settings_pin_change">Modifier</string>
     <string name="settings_pin_remove">Supprimer</string>
     <string name="settings_pin_title">Code d\'accès</string>
     <string name="settings_pin_new">Nouveau code (4 à 8 chiffres)</string>

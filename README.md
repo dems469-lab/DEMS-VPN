@@ -143,42 +143,52 @@ Transports TCP uniquement (tcp, ws, grpc, h2, httpupgrade, xhttp) ; en REALITY l
 fragmentation porte sur 1–3 paquets.
 
 **Moteur de décision** : « Tester les serveurs à la connexion » mesure la latence de
-tous les serveurs en parallèle (3 instances Xray temporaires au maximum) et connecte
+tous les serveurs en parallèle (2 instances Xray temporaires au maximum) et connecte
 automatiquement le plus rapide. Pendant la recherche, réappuyer sur le bouton
 connecte directement le serveur actuel sans attendre.
 
-**Performance & stabilité** : reconnexion automatique après un changement de réseau,
-WakeLock (écran éteint), tampons TCP et UDP transmis à hev.
+**Performance & stabilité** : watchdog toutes les 20 s (état du cœur **et** requête
+HTTP réelle via le proxy), reconnexion sur changement de réseau avec backoff
+exponentiel 1→30 s (8 essais), WakeLock borné et renouvelé, tampons TCP/UDP avec
+profils Stable/Rapide, `sockopt` (TFO, TCP_NODELAY, keepalive), Mux optionnel
+(WS + TLS uniquement). Le service ne redémarre plus seul si l'utilisateur avait
+arrêté le VPN.
 
-**Ports** : SOCKS5 (10808), HTTP (10809), UDP via SOCKS5.
+**Ports** : SOCKS5 (10808, authentifié), HTTP (10809, **désactivé par défaut** ;
+s'il est activé, authentification obligatoire), UDP via SOCKS5.
 
-**Sécurité** : code PIN au lancement, version TLS minimale, Hardware ID (clé XUDP de
-32 octets) affiché et régénérable.
+**Sécurité** : code PIN au lancement (PBKDF2-HMAC-SHA256 salé, comparaison en temps
+constant), version TLS minimale, Hardware ID (clé XUDP de 32 octets) affiché et
+régénérable.
 
-**Diagnostics** : URL de test de latence, niveau de journalisation, test de latence par
-serveur, débits en temps réel.
+**Diagnostics** : écran dédié (temps de connexion, latence, débit moyen sur 10 s,
+reconnexions de session, taille décodée de la clé XUDP), URL de test, niveau de
+journalisation, test de latence par serveur, débits en temps réel.
 
 ## Limites connues / prochaines étapes
 
 - **`minSdk 29`** : imposé par l'AAR officiel de hev-socks5-tunnel. Pour descendre à 24,
   il faut recompiler hev avec le NDK (`Android.mk`, `APP_PLATFORM=android-24`), comme le
   fait v2rayNG.
-- **IPv6 désactivé par défaut** : sans route IPv6, le trafic IPv6 des autres apps peut
-  sortir en direct. Activez l'option si votre réseau et votre serveur le supportent.
-- **Pas encore** : rotation automatique vers un serveur de secours, changement de
-  transport automatique (ws → grpc → …), abonnements, import par QR code, mode root
-  (proxy transparent hors API VPN), UDPGW/DNSTT, démarrage au boot, tuile Quick
-  Settings, compteur de données par application.
-- **Vrai multipath (Wi-Fi + 4G simultanés)** : pas réalisable avec l'API VpnService
+- **IPv6 désactivé par défaut** : la route `::/0` est posée sur le TUN et Xray bloque
+  `::/0` — aucun paquet IPv6 ne peut sortir hors tunnel, mais les applications n'ont
+  pas d'IPv6 tant que l'option est désactivée. Activez-la si votre réseau et votre
+  serveur le supportent.
+- **Bientôt (non implémenté)** : rotation automatique vers un serveur de secours,
+  changement de transport automatique (ws → grpc → …), abonnements, import par QR
+  code, mode root (proxy transparent hors API VPN), UDPGW/DNSTT, démarrage au boot,
+  tuile Quick Settings, compteur de données par application.
+- **Non prévu avec ce cœur — vrai multipath (Wi-Fi + 4G simultanés)** : pas réalisable avec l'API VpnService
   (un seul TUN par app) ni avec un noyau Xray seul. La reconnexion automatique fait la
   bascule entre réseaux, mais sans continuité ni agrégation.
-- **FEC / BBR** : Xray n'expose ni FEC ni contrôle de congestion BBR côté client
+- **Non prévu avec ce cœur — FEC / BBR** : Xray n'expose ni FEC ni contrôle de congestion BBR côté client
   (BBR exigerait un noyau modifié, donc root). Approximation possible côté client :
   transports mKCP/QUIC selon ce que le serveur supporte.
-- **Compression** : Xray ne compresse pas le trafic applicatif ; l'option gzip d'autres
-  clients n'a pas d'équivalent ici.
+- **Non prévu avec ce cœur — compression** : Xray ne compresse pas le trafic
+  applicatif ; l'option gzip d'autres clients n'a pas d'équivalent ici.
 - **Verrouillage** : code PIN uniquement (pas de biométrie pour l'instant) ; le PIN est
-  stocké sous forme de hachage SHA-256, jamais en clair.
+  stocké sous forme de PBKDF2 salé, jamais en clair. PIN oublié = effacement des
+  données de l'application.
 - **DoT / DoQ distant** : non supportés par le cœur Xray embarqué (voir plus haut).
 - **Signature release** : ajoutez un keystore et la configuration `signingConfigs`
   avant de distribuer.

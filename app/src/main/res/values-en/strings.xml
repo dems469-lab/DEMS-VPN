@@ -43,17 +43,14 @@
     <string name="status_error">Error</string>
 
     <string name="hint_tap_connect">Tap to connect</string>
-    <string name="hint_tap_disconnect">Tap to disconnect</string>
     <string name="label_server">Server</string>
     <string name="label_mode">Mode</string>
     <string name="mode_value">TUN · Xray</string>
     <string name="no_server">No server</string>
-    <string name="no_server_hint">Add a server to get started</string>
     <string name="add_server">Add a server</string>
     <string name="core_label">Core</string>
     <string name="label_download">Download</string>
     <string name="label_upload">Upload</string>
-    <string name="label_traffic">Speed</string>
 
     <string name="servers_title">Servers</string>
     <string name="servers_empty">No servers yet.\nAdd a vless://, vmess://, trojan:// or ss:// link.</string>
@@ -106,7 +103,6 @@
     <string name="settings_split_include">Only selected apps</string>
     <string name="settings_bypass_title_exclude">Bypassed apps (outside VPN)</string>
     <string name="settings_bypass_title_include">Allowed apps (inside VPN)</string>
-    <string name="settings_bypass">Bypassed apps</string>
     <string name="settings_bypass_desc">Select the apps affected by the mode above</string>
     <string name="settings_bypass_none">None selected</string>
     <string name="settings_bypass_count">%1$d app(s) selected</string>
@@ -152,7 +148,6 @@
     <string name="settings_app_lock_enabled">Enabled</string>
     <string name="settings_app_lock_disabled">Disabled</string>
     <string name="settings_pin_set">Set</string>
-    <string name="settings_pin_change">Change</string>
     <string name="settings_pin_remove">Remove</string>
     <string name="settings_pin_title">Access PIN</string>
     <string name="settings_pin_new">New PIN (4 to 8 digits)</string>
